@@ -17,7 +17,7 @@
 class PolBeam
 {
     public:
-        PolBeam(unsigned int nside, unsigned long nPixels);
+        PolBeam(int nside, long nPixels);
        
        ~PolBeam();
 
@@ -40,7 +40,7 @@ class PolBeam
             // Jones vectors
             float* magEco_x, float* phaseEco_x,
             float* magEco_y, float* phaseEco_y,
-            float* magEcx_x, float* phaseEcx_x
+            float* magEcx_x, float* phaseEcx_x,
             float* magEcx_y, float* phaseEcx_y
         );
 		
@@ -74,8 +74,9 @@ class PolBeam
         float omU;
         float omV;
         
-    private:
         Healpix_Base hpxBase;    
+        
+    private:
 
 		int  nside;
         long nPixels;

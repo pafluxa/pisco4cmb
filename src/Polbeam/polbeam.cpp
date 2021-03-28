@@ -7,26 +7,26 @@
 // to make use of Healpix_base pointing
 #include <pointing.h>
 
-PolBeam::PolBeam(unsigned int nside, unsigned long nPixels) : 
-	nside{ nside }, \
-    nPixels{ nPixels }, \
-    epsilon{ 0.0 }
+PolBeam::PolBeam(int nside, long nPixels) : 
+	nside{nside}, \
+    nPixels{nPixels}, \
+    epsilon{0.0}
 {
-	hpxBase.SetNside( nside, RING );
-    pointing p = hpxBase.pix2ang( _nPixels );
+	hpxBase.SetNside(nside, RING);
+    pointing p = hpxBase.pix2ang(nPixels );
     
-    this->rhoMax = p.theta;
-    this->alloc_buffers();
+    rhoMax = p.theta;
+    alloc_buffers();
 }
 
 PolBeam::~PolBeam() 
 {
-	_free_buffers();
+	free_buffers();
 }
 
-void PolBeam::_alloc_buffers() 
+void PolBeam::alloc_buffers() 
 {
-	size_t buffSize = sizeof(float)*_nPixels;
+	size_t buffSize = sizeof(float)*nPixels;
 	
     Da_I = (float*)malloc(buffSize);
     Da_V = (float*)malloc(buffSize);
@@ -43,7 +43,7 @@ void PolBeam::_alloc_buffers()
 	Db_Usin = (float*)malloc(buffSize);
 }
 
-void PolBeam::_free_buffers() 
+void PolBeam::free_buffers() 
 {
 	free(Da_I);
 	free(Da_V);
@@ -67,7 +67,7 @@ PolBeam::half_beam_from_fields
     // Jones vectors
 	float* magEco_x, float* phaseEco_x,
 	float* magEco_y, float* phaseEco_y,
-	float* magEcx_x, float* phaseEcx_x
+	float* magEcx_x, float* phaseEcx_x,
 	float* magEcx_y, float* phaseEcx_y
 )
 /*
@@ -96,12 +96,12 @@ PolBeam::half_beam_from_fields
     std::complex<double> Ecx_x;
     std::complex<double> Ecx_y;
     
-    if ( polFlag != 'a' and polFlag != 'b' ) 
+    if(polFlag != 'a' and polFlag != 'b') 
     {
         throw std::invalid_argument( "valid polFlags are 'a' and 'b'" );
     }
 
-    if(flag == 'a')
+    if(polFlag == 'a')
     {
         Ip = Ia;
         Qp = Qa;
@@ -130,11 +130,11 @@ PolBeam::half_beam_from_fields
         Ecx_y = std::polar(magEco_y[i], phaseEco_y[i]);
         
         // compute \tilde{I}
-        ii = Eco_x.norm() + Eco_y.norm() \
-           + Ecx_x.norm() + Ecx_y.norm();
+        ii = std::norm(Eco_x) + std::norm(Eco_y) \
+           + std::norm(Ecx_x) + std::norm(Ecx_y);
         // compute \tilde{Q}
-        qq = (Eco_x.norm() + Eco_y.norm()) \
-           - (Ecx_x.norm() + Ecx_y.norm());
+        qq = std::norm(Eco_x) + std::norm(Eco_y) \
+           - std::norm(Ecx_x) + std::norm(Ecx_y);
         // compute \tilde{U}
         uu = 2*std::real(Eco_x*Ecx_x + Eco_y*Ecx_y);
         // TODO: add V, possibly equals this
@@ -163,10 +163,10 @@ PolBeam::half_beam_from_fields
     }
 }
 
-void build_beams(void)
+void PolBeam::build_beams(void)
 {
     long i;
-    for(i = 0; i < this->_nPixels; i++)
+    for(i = 0; i < nPixels; i++)
     {
         // Da[1]
         Da_I[i] = Ia[i] + epsilon*Ib[i];
@@ -183,7 +183,7 @@ void build_beams(void)
         Db_I[i] = Ib[i] + epsilon*Ia[i];
         // Db[2]
         Db_Qcos[i] = -(Qb[i] - epsilon*Qa[i]);
-        Db_Qsin[i] = Ub[i] - epsilon*Ua[i]);
+        Db_Qsin[i] = Ub[i] - epsilon*Ua[i];
         // Db[3]
         Db_Ucos[i] = -(Ub[i] - epsilon*Ua[i]);
         Db_Usin[i] = -(Qb[i] - epsilon*Qa[i]);
@@ -246,9 +246,9 @@ void PolBeam::make_unpol_gaussian_elliptical_beam (
     int bpix;
     double rho,sig,val;
     double omega = 0.0;
-	for( bpix = 0; bpix < _nPixels; bpix++ )
+	for( bpix = 0; bpix < nPixels; bpix++ )
 	{
-		pointing bp = hpxBase.pix2ang( bpix );
+		pointing bp = hpxBase.pix2ang(bpix);
 		rho = bp.theta;
 		sig = bp.phi;
 		
@@ -257,20 +257,36 @@ void PolBeam::make_unpol_gaussian_elliptical_beam (
 		             c*sin(sig)*sin(sig))*rho*rho );
 		
 		// unpolarized beam means I,Q and U beams are all the same.
-		_sI[bpix] = val;
-		_sQ[bpix] = val;
-		_sU[bpix] = val;
-		_sV[bpix] = val;
+		Da_I[bpix] = val;
+		Da_Qcos[bpix] = val;
+		Da_Qsin[bpix] = val;
+		Da_Ucos[bpix] = val;
+		Da_Usin[bpix] = val;
+		Da_V[bpix] = 0.0;
+
+		Db_I[bpix] = val;
+		Db_Qcos[bpix] = val;
+		Db_Qsin[bpix] = val;
+		Db_Ucos[bpix] = val;
+		Db_Usin[bpix] = val;
+		Db_V[bpix] = 0.0;
 		
 		omega = omega + val;
 	}
 	
 	// normalize so beam solid angle equals 1.0
-	for( bpix = 0; bpix < _nPixels; bpix++ )
+	for( bpix = 0; bpix < nPixels; bpix++ )
 	{
-		_sI[bpix] /= omega;
-		_sQ[bpix] /= omega;
-		_sU[bpix] /= omega;
-		_sV[bpix] /= omega;
+		Da_I[bpix]    /= omega;
+		Da_Qcos[bpix] /= omega;
+		Da_Qsin[bpix] /= omega;
+		Da_Ucos[bpix] /= omega;
+		Da_Usin[bpix] /= omega;
+
+		Db_I[bpix]    /= omega;
+		Db_Qcos[bpix] /= omega;
+		Db_Qsin[bpix] /= omega;
+		Db_Ucos[bpix] /= omega;
+		Db_Usin[bpix] /= omega;
 	}
 }

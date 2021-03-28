@@ -25,20 +25,20 @@ class Convolver
 			float* convData,
 			Scan& scan, 
 			Sky& sky,
-			PolBeam& beam );
+			PolBeam& beam, char polFlag);
 		
     private:
 		
 		unsigned long _nsamples;
 		unsigned int _nthreads;
 				
-		std::vector< float* > _tempBuffers;
+		std::vector< float* > tempBuffer;
 		
-		void _beam_times_sky( 
+		void beam_times_sky( 
 			Sky& sky, 
-			PolBeam& beam, 
+			PolBeam& beam, char polFlag,
 			float phi0, float theta0, float psi0,
-            float da, float db);
+            float* data);
 			    
 };
 
