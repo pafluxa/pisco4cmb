@@ -1,0 +1,7 @@
+/home/pafluxa/work/personal/pisco4cmb/src/build/CMakeFiles/install/strip.dir
+/home/pafluxa/work/personal/pisco4cmb/src/build/CMakeFiles/install/local.dir
+/home/pafluxa/work/personal/pisco4cmb/src/build/CMakeFiles/install.dir
+/home/pafluxa/work/personal/pisco4cmb/src/build/CMakeFiles/list_install_components.dir
+/home/pafluxa/work/personal/pisco4cmb/src/build/CMakeFiles/rebuild_cache.dir
+/home/pafluxa/work/personal/pisco4cmb/src/build/CMakeFiles/edit_cache.dir
+/home/pafluxa/work/personal/pisco4cmb/src/build/CMakeFiles/gpuconv.exe.dir
