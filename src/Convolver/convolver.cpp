@@ -1,5 +1,5 @@
-#include "convolver.hpp"
-#include "sphtrigo.hpp"
+#include "Convolver/convolver.hpp"
+#include "Sphtrigo/sphtrigo.hpp"
 
 #include <omp.h>
 #include <cstring>
@@ -8,7 +8,7 @@
 #include <arr.h>
 #include <rangeset.h>
 
-Convolver::Convolver( unsigned long _nsamples, unsigned int _nthreads )
+Convolver::Convolver(unsigned long _nsamples, unsigned int _nthreads)
 {
 	nsamples = _nsamples;
 	nthreads = _nthreads;	
@@ -51,14 +51,13 @@ void Convolver::exec_convolution(
     unsigned long local;
 
     // convenience pointers
-	const float* phicrd = scan.get_phi_ptr();
-	const float* thetacrd = scan.get_theta_ptr();
-	const float* psicrd  = scan.get_psi_ptr();
-	
-	// set number of threads (1 by default)
-	omp_set_num_threads(nthreads);
+	const double* phicrd = scan.get_phi_ptr();
+	const double* thetacrd = scan.get_theta_ptr();
+	const double* psicrd  = scan.get_psi_ptr();
+
     // begin parallel region
-	#pragma omp parallel for
+	//#pragma omp parallel for
+    #pragma omp parallel for
     for(long i = 0; i < nsamples; i++) 
     {
         float data = 0.0;
@@ -70,6 +69,7 @@ void Convolver::exec_convolution(
     }    
 }
 
+#pragma omp declare simd
 void Convolver::beam_times_sky( 
 	Sky& sky, 
 	PolBeam& beam, char polFlag, 

@@ -5,9 +5,9 @@
 #ifndef _CPUCONVOLVERH
 #define _CPUCONVOLVERH
 
-#include "sky.hpp"
-#include "scan.hpp"
-#include "polbeam.hpp"
+#include "Sky/sky.hpp"
+#include "Scan/scan.hpp"
+#include "Polbeam/polbeam.hpp"
 
 #include <vector>
 
