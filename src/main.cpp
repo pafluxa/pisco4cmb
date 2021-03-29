@@ -6,11 +6,11 @@
 #include <cstdlib>
 #include <chrono>  
 
-#define NSIDE   128	
+#define NSIDE   128
 #define NPIXELS (12*NSIDE*NSIDE)
 // this number needs to be a perfect square for the test to work out!
 // this is the number of pixels in an nside=128 healpix map
-#define NSAMPLES 1024
+#define NSAMPLES 10*(12*NSIDE*NSIDE)
 
 #define NSIDE_BEAM 1024
 // healpy.query_disc( 1024, (0,0,1), numpy.radians(5) ).size
@@ -27,8 +27,7 @@ void init_sky( float* I, float* Q, float* U, float* V )
 // routine to set the scan to observe the pole with a dumb grid approach
 void init_scan( float* phi, float* theta, float* psi )
 {	
-	float deltaColat = 0.1;
-	
+	float deltaColat = 0.5;
 	float _phi, _tht, _psi;
 	// set psi = 0 and phi = 0 for the whole scan
 	_psi = 0;
@@ -38,7 +37,6 @@ void init_scan( float* phi, float* theta, float* psi )
 	for( float i=NSAMPLES/2; i>0; i-- ) 
 	{
 		_tht = M_PI_2 - (i/NSAMPLES)*deltaColat;
-		
 		phi[s]   = _phi;
 		theta[s] = _tht;
 		psi[s]   = _psi;
@@ -48,7 +46,6 @@ void init_scan( float* phi, float* theta, float* psi )
 	for( float i=0; i<NSAMPLES/2; i++ ) 
 	{
 		_tht = M_PI_2 + (i/NSAMPLES)*deltaColat;
-		
 		phi[s]   = _phi;
 		theta[s] = _tht;
 		psi[s]   = _psi;
@@ -80,31 +77,24 @@ int main( void )
 		
 	init_sky( skyI, skyQ, skyU, skyV );
 	Sky sky( NSIDE, skyI, skyQ, skyU, skyV );
-    puts("#OK sky built");
-	
+
 	init_scan( phi, theta, psi );
 	Scan scan( NSAMPLES, phi, theta, psi );
-    puts("#OK scan built");
 	
     PolBeam beam( NSIDE_BEAM, NPIXELS_BEAM );
-    puts("#OK beam allocated");
 	beam.make_unpol_gaussian_elliptical_beam( 1.5, 1.5, 0.0 );
-    puts("#OK beams built");
 
-    Convolver* cconv = new Convolver( NSAMPLES, 1 );
-    puts("#OK convolver ready");
-    puts("#WAIT computing convolution");
+    Convolver* cconv = new Convolver(NSAMPLES, 16);
 	start  = std::chrono::high_resolution_clock::now();
-	cconv->exec_convolution( data, scan, sky, beam, 'a');
+    cconv->exec_convolution( data, scan, sky, beam, 'a');
 	finish = std::chrono::high_resolution_clock::now();
-    puts("#OK convolution done");
     
 	elapsed = finish - start;
 	std::cerr << "#CPU Convolution took " << elapsed.count() << " sec\n";
 	
     for(int i=0; i < NSAMPLES; i++)
         printf("%08d%14.8f\n", i, data[i]);
-
+    
 	delete cconv;
     
 	free(phi); free(theta); free(psi);

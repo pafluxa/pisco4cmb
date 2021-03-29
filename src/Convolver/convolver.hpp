@@ -29,10 +29,12 @@ class Convolver
 		
     private:
 		
-		unsigned long _nsamples;
-		unsigned int _nthreads;
-				
-		std::vector< float* > tempBuffer;
+		unsigned long nsamples;
+		unsigned int nthreads;
+        
+        float* masterBuffer;
+		std::vector<long> bufferStart;
+		std::vector<long> bufferEnd;
 		
 		void beam_times_sky( 
 			Sky& sky, 

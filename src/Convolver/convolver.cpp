@@ -8,33 +8,36 @@
 #include <arr.h>
 #include <rangeset.h>
 
-Convolver::Convolver( unsigned long nsamples, unsigned int nthreads )
+Convolver::Convolver( unsigned long _nsamples, unsigned int _nthreads )
 {
-	_nsamples = nsamples;
-	_nthreads = nthreads;
+	nsamples = _nsamples;
+	nthreads = _nthreads;	
+    masterBuffer = (float*)malloc(sizeof(float)*nsamples);
 	
-	// take no risk and make all chunks as large as needed
-	int chunkSize = _nsamples/_nthreads;
-	int reminder  = _nsamples%_nthreads;
-	int samps = chunkSize + reminder;
-	
-	size_t perThreadBuffSize = sizeof(float)*(samps);
-	
-	int i;
-	for( i=0; i<_nthreads; i++ ) {
-		float *tba = (float*)malloc( perThreadBuffSize );
-		tempBuffer.push_back(tba);
+    int chunkSize = nsamples/nthreads;
+    int it = 0;	
+    int s = 0;
+    int e = chunkSize;
+    while(it < nthreads - 1)
+    {
+        bufferStart.push_back(s);
+        bufferEnd.push_back(e);
+        s += chunkSize;
+        e += chunkSize;        
+        it += 1;
 	}
+    chunkSize = nsamples - nthreads*chunkSize;
+    s += chunkSize;
+    e += chunkSize;
+    bufferStart.push_back(s);
+    bufferEnd.push_back(e);    
 }
 
 Convolver::~Convolver()
 {
-	int i;
-	for( i=0; i<_nthreads; i++ ) {
-		float *tba = tempBuffer.back();
-		free(tba);
-		tempBuffer.pop_back();
-	}
+    //free(masterBuffer);
+    bufferStart.clear();
+    bufferEnd.clear();
 }
 
 void Convolver::exec_convolution(
@@ -46,86 +49,25 @@ void Convolver::exec_convolution(
     float res;
     unsigned long s;
     unsigned long local;
-    
-    float phi; 
-    float theta; 
-    float psi;
-    float* tempConvData;
 
-	int t;
-	long start; 
-    long end; 
-    long delta;
-	size_t buffsize;
-    
     // convenience pointers
 	const float* phicrd = scan.get_phi_ptr();
 	const float* thetacrd = scan.get_theta_ptr();
 	const float* psicrd  = scan.get_psi_ptr();
 	
-	// shared vector to allow reconstruction of data
-	// even entries correspond to the start sample of
-	// thread T, odd entries correspond to the end sample
-	int startEnd[2*_nthreads];
-	
 	// set number of threads (1 by default)
-	omp_set_num_threads( _nthreads );
-	
+	omp_set_num_threads(nthreads);
     // begin parallel region
-	#pragma omp parallel default(shared)
-	{ 
-        float data;
-        // these variables must live inside the parallel block
-        // in order to make them private by default
-        int start, end;
-        int thrId  = omp_get_thread_num();
-        int stride = omp_get_num_threads();
-        int chunkSize  = (scan.get_nsamples() / stride );
-        int reminder   = (scan.get_nsamples() % stride );
-    
-        start = thrId * chunkSize;
-        if( thrId + 1 == stride ) 
-        {
-            end = start + chunkSize + reminder; 
-        }
-        else 
-        {
-            end = start + chunkSize;
-        }
-        // directive to ensure atomic operation
-        #pragma omp critical
-        startEnd[2*thrId]   = start;
-        // directive to ensure atomic operation
-        #pragma omp critical
-        startEnd[2*thrId+1] =   end;
-        
-        tempConvData = tempBuffer[thrId];
-
-        local = 0;
-        for( s=start; s<end; s++, local++) {
-            phi   =   phicrd[s]; 
-            theta = thetacrd[s]; 
-            psi   =   psicrd[s];
-            beam_times_sky(sky, beam, polFlag, phi, theta, psi, &data);
-            tempConvData[local] = data;
-        }
-
-	} 
-	// end parallel region
-    
-	// rebuild convolution buffer
-	for( t=0; t<_nthreads; t++) 
+	#pragma omp parallel for
+    for(long i = 0; i < nsamples; i++) 
     {
-		start = startEnd[2*t];
-		end   = startEnd[2*t+1];
-		delta = end - start;
-		buffsize = sizeof(float)*delta;
-		
-		const float* td = tempBuffer.at(t);
-		memcpy(static_cast<void*>(tod_data + start), 
-		       static_cast<const void*>(td),
-		       buffsize);
-	}
+        float data = 0.0;
+        double phi   =   phicrd[i]; 
+        double theta = thetacrd[i]; 
+        double psi   =   psicrd[i];
+        beam_times_sky(sky, beam, polFlag, phi, theta, psi, &data);
+        tod_data[i] = data;
+    }    
 }
 
 void Convolver::beam_times_sky( 
@@ -139,34 +81,15 @@ void Convolver::beam_times_sky(
 	double ww;
     double rmax;
     
-    double ra_bc;
-    double dec_bc;
-    double pa_bc;
+    double ra_bc, dec_bc, pa_bc;
+	double ra_pix, dec_pix;
     
-	double ra_pix; 
-    double dec_pix;
+    double rho, sigma, chi, c2chi, s2chi;
     
-    double rho;
-    double sigma;
-    double chi;
-	double c2chi;
-    double s2chi;
+    double ia, qacos, qasin, uacos, uasin;
+    double ib, qbcos, qbsin, ubcos, ubsin;
     
-    double ia;
-    double qacos;
-    double qasin;
-    double uacos;
-    double uasin;
-
-    double ib;
-    double qbcos;
-    double qbsin;
-    double ubcos;
-    double ubsin;
-    
-    int range_begin;
-    int range_end; 
-    int rn;
+    int range_begin, range_end, rn;
     
     long i;
     long ni;
