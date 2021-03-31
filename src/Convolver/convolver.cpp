@@ -8,10 +8,11 @@
 #include <arr.h>
 #include <rangeset.h>
 
-Convolver::Convolver(unsigned long _nsamples, unsigned int _nthreads)
+Convolver::Convolver(unsigned long _nsamples)
 {
-	nsamples = _nsamples;
-	nthreads = _nthreads;	
+    // get active number of threads
+    nthreads = omp_get_num_threads();	
+    nsamples = _nsamples;
     masterBuffer = (float*)malloc(sizeof(float)*nsamples);
 	
     int chunkSize = nsamples/nthreads;
@@ -35,82 +36,119 @@ Convolver::Convolver(unsigned long _nsamples, unsigned int _nthreads)
 
 Convolver::~Convolver()
 {
-    //free(masterBuffer);
+    free(masterBuffer);
+    
     bufferStart.clear();
     bufferEnd.clear();
 }
 
 void Convolver::exec_convolution(
-	float* tod_data,
+	float* data_a, float* data_b, 
+    char polFlag,
 	Scan& scan, 
 	Sky& sky,
-	PolBeam& beam, char polFlag) {
-
+	PolBeam& beam) 
+{
     float res;
     unsigned long s;
     unsigned long local;
 
     // convenience pointers
-	const double* phicrd = scan.get_phi_ptr();
-	const double* thetacrd = scan.get_theta_ptr();
-	const double* psicrd  = scan.get_psi_ptr();
+	const double* ra_coords = scan.get_ra_ptr();
+	const double* dec_coords = scan.get_dec_ptr();
+	const double* pa_coords  = scan.get_pa_ptr();
 
     // begin parallel region
-	//#pragma omp parallel for
     #pragma omp parallel for
     for(long i = 0; i < nsamples; i++) 
     {
-        float data = 0.0;
-        double phi   =   phicrd[i]; 
-        double theta = thetacrd[i]; 
-        double psi   =   psicrd[i];
-        beam_times_sky(sky, beam, polFlag, phi, theta, psi, &data);
-        tod_data[i] = data;
+        // declare these internally because they only
+        // live inside the parallel region
+        float da = 0.0;
+        float db = 0.0;
+        double ra_bc   = ra_coords[i]; 
+        double dec_bc = dec_coords[i]; 
+        double pa_bc   = pa_coords[i];
+        
+        beam_times_sky(
+            sky, beam, 
+            ra_bc, dec_bc, pa_bc, 
+            &da, &db);
+        
+        if(polFlag == 'a')
+        {
+            data_a[i] = da;
+        }
+        else if (polFlag == 'b')
+        {
+            data_b[i] = db;
+        }
+        else if (polFlag == 'p')
+        {
+            data_a[i] = da;
+            data_b[i] = db;
+        }
+        else
+        {
+            throw std::invalid_argument(\
+                "valid polFlags are 'a', 'b' and 'p'" );
+        }
     }    
 }
 
-#pragma omp declare simd
 void Convolver::beam_times_sky( 
 	Sky& sky, 
-	PolBeam& beam, char polFlag, 
-	float phi0, float theta0, float psi0,
-    float* tod_data)
+    PolBeam& beam, 
+	float ra_bc, 
+    float dec_bc, \
+    float pa_bc,
+    float* da, float* db)
 {
-	double data;
-  
 	double ww;
     double rmax;
+ 	double data_a;
+ 	double data_b;
     
-    double ra_bc, dec_bc, pa_bc;
 	double ra_pix, dec_pix;
-    
     double rho, sigma, chi, c2chi, s2chi;
     
-    double ia, qacos, qasin, uacos, uasin;
-    double ib, qbcos, qbsin, ubcos, ubsin;
+    double beam_a[5]; 
+    double beam_b[5];
+    const float* bpa[5];
+    const float* bpb[5];
+
+    double tempQ, tempU, Ival, Qval, Uval;
     
+    long i, ni, skyPix;
     int range_begin, range_end, rn;
     
-    long i;
-    long ni;
-    long skyPix;
-
 	fix_arr< int,    4 > neigh;
 	fix_arr< double, 4 >   wgh;
-	rangeset< int > intraBeamRanges;
+	rangeset<int> intraBeamRanges;
 	
-	// re-named variables for compatilibity with original PISCO code.
-	ra_bc  = phi0;
-	dec_bc = M_PI/2.0 - theta0;
-	pa_bc  = psi0;
-
-	// find sky pixels around beam center up to rhoMax	
+    // convienence pointers
+    // 'a' beam
+    bpa[0] = beam.Da_I;
+    bpa[1] = beam.Da_Qcos;
+    bpa[2] = beam.Da_Qsin;
+    bpa[3] = beam.Da_Ucos;
+    bpa[4] = beam.Da_Usin;
+    // 'b' beam
+    bpb[0] = beam.Db_I;
+    bpb[1] = beam.Db_Qcos;
+    bpb[2] = beam.Db_Qsin;
+    bpb[3] = beam.Db_Ucos;
+    bpb[4] = beam.Db_Usin;
+	
+    // find sky pixels around beam center, up to beam.rhoMax	
 	rmax = beam.get_rho_max();
-	pointing sc( theta0, ra_bc );
-	sky.hpxBase.query_disc( sc, rmax, intraBeamRanges );
+	pointing sc(M_PI_2 - dec_bc, ra_bc);
+	sky.hpxBase.query_disc(sc, rmax, intraBeamRanges);
 		
 	// sky times beam multiplication loop
-	data = 0.0;
+	data_a = 0.0;
+	data_b = 0.0;
+    // for every sky pixel in the beam
 	for( rn=0; rn < intraBeamRanges.nranges(); rn++ )
 	{
 		range_begin = intraBeamRanges.ivbegin( rn );
@@ -118,76 +156,76 @@ void Convolver::beam_times_sky(
 		
 		for( skyPix=range_begin; skyPix < range_end; skyPix++ )
 		{	
-			pointing sp = sky.hpxBase.pix2ang( skyPix );
-			
+            // get pointing of sky pixel
+			pointing sp = sky.hpxBase.pix2ang(skyPix);
 			ra_pix = sp.phi;
 			dec_pix = M_PI/2.0 - sp.theta;
 			
 			// safety initializers
 			rho=0.0; sigma=0.0; chi=0.0;
+            // compute rho sigma and chi at beam pixel
 			SphericalTransformations::rho_sigma_chi_pix( 
-				&rho,&sigma,&chi,
+				&rho, &sigma, &chi,
 				ra_bc , dec_bc, pa_bc,
 				ra_pix, dec_pix );
-			
-			// interpolate beam at (rho,sigma)
-			pointing bp( rho, sigma );
-			beam.hpxBase.get_interpol( bp, neigh, wgh );
-			
-			ia = 0.0; 
-            qacos = 0.0; 
-            qasin = 0.0;
-            uacos = 0.0;
-            uasin = 0.0;
-            
-			ib = 0.0; 
-            qbcos = 0.0; 
-            qbsin = 0.0;
-            ubcos = 0.0;
-            ubsin = 0.0;
-			for( i=0; i<4; i++ ) {
-                ni = neigh[i];
-                ww = wgh[i];
-				
-                if(polFlag == 'a')
-                {
-                    ia += beam.Da_I[ni] * ww;
-                    qacos += beam.Da_Qcos[ni] * ww;
-                    qasin += beam.Da_Qsin[ni] * ww;
-                    uacos += beam.Da_Ucos[ni] * ww;
-                    uasin += beam.Da_Usin[ni] * ww;
-                }
-                
-                if(polFlag == 'b')
-                {
-                    ib += beam.Db_I[ni] * ww;
-                    qbcos += beam.Db_Qcos[ni] * ww;
-                    qbsin += beam.Db_Qsin[ni] * ww;
-                    ubcos += beam.Db_Ucos[ni] * ww;
-                    ubsin += beam.Db_Usin[ni] * ww;
-                }
-			}
-			
             c2chi = cos(2*chi);
             s2chi = sin(2*chi);
+            /* uncomment to use Ludwig's second definition
 			
-            if(polFlag == 'a')
-            {
-                data = data
-                    + sky.sI[skyPix]*ia 
-                    + sky.sQ[skyPix]*(qacos*c2chi + qasin*s2chi)
-                    + sky.sU[skyPix]*(uacos*c2chi + uasin*s2chi);
-            }
+            SphericalTransformations::theta_phi_psi_pix( 
+				&rho,&sigma,&chi,
+				ra_bc , dec_bc, pa_bc,
+                ra_pix, dec_pix);
+            */
+			
+            // safety initializers
+            std::memset(beam_a, 0.0, sizeof(double)*5);
+            std::memset(beam_b, 0.0, sizeof(double)*5);
             
-            if(polFlag == 'b')
+            // interpolate beam at (rho,sigma)
+			pointing bp(rho, sigma);
+			beam.hpxBase.get_interpol(bp, neigh, wgh);
+			for(int b=0; b < 5; b++)
             {
-                data = data
-                      + sky.sI[skyPix]*ib 
-                      + sky.sQ[skyPix]*(qbcos*c2chi + qbsin*s2chi)
-                      + sky.sU[skyPix]*(ubcos*c2chi + ubsin*s2chi);
+                for(int i=0; i < 4; i++) 
+                {
+                    // yes I am being cheap here
+                    ni = neigh[i];
+                    if(ni > beam.nPixels)
+                    {
+                        ww = 0.0;
+                    }
+                    else
+                    {
+                        ww = wgh[i];
+                    }
+                    beam_a[b] += double(bpa[b][ni])*ww;
+                    beam_b[b] += double(bpb[b][ni])*ww;
+                }
             }
+            // data = beam x sky
+            /* memory help below
+             * 
+             * beam_a[0] = Da_I;
+             * beam_a[1] = Da_Qcos;
+             * beam_a[2] = Da_Qsin;
+             * beam_a[3] = Da_Ucos;
+             * beam_a[4] = Da_Usin;
+             */
+            data_a = data_a 
+              + sky.sI[skyPix]*beam_a[0]
+              + sky.sQ[skyPix]*(beam_a[1]*c2chi + beam_a[2]*s2chi)
+              + sky.sU[skyPix]*(beam_a[3]*c2chi + beam_a[4]*s2chi);
+            data_b = data_b
+              + sky.sI[skyPix]*beam_b[0]
+              + sky.sQ[skyPix]*(beam_b[1]*c2chi + beam_b[2]*s2chi)
+              + sky.sU[skyPix]*(beam_b[3]*c2chi + beam_b[4]*s2chi);
 		}
 	}
-	
-	(*tod_data) = (float)(data);
+    if(abs(data_a) < 1e-10)
+        data_a = 0.0;
+    if(abs(data_b) < 1e-10)
+        data_b = 0.0;
+	(*da) = (float)(data_a);
+	(*db) = (float)(data_b);
 }

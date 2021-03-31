@@ -28,10 +28,10 @@ class Sky
 		Healpix_Base hpxBase;
 		
         // constant pointers to buffers
-		float* sI;
-		float* sQ;
-		float* sU;
-		float* sV;
+		const float* sI;
+		const float* sQ;
+		const float* sU;
+		const float* sV;
     private:
 		
 		unsigned int  _nside;

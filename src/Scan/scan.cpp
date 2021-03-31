@@ -3,23 +3,26 @@
 
 Scan::Scan( 
 	unsigned long nsamples, 
-	const double* phi, 
-	const double* theta, 
-	const double* psi ) : _nsamp{ nsamples } 
+	const double* _ra, 
+	const double* _dec, 
+	const double* _pa ) : nsamp{ nsamples } 
 {
-	_phi = phi;
-	_theta = theta;
-	_psi = psi;
+	ra = _ra;
+	dec = _dec;
+	pa = _pa;
 }
 
-const double* Scan::get_phi_ptr() const {
-	return _phi;
+const double* Scan::get_ra_ptr() const 
+{
+	return ra;
 }
 
-const double* Scan::get_theta_ptr() const {
-	return _theta;
+const double* Scan::get_dec_ptr() const 
+{
+	return dec;
 }
 
-const double* Scan::get_psi_ptr() const {
-	return _psi;
+const double* Scan::get_pa_ptr() const 
+{
+	return pa;
 }

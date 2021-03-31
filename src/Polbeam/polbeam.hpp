@@ -34,7 +34,7 @@ class PolBeam
             return rhoMax; 
         };
 		
-        void half_beam_from_fields
+        void beam_from_fields
         ( 
             char polFlag,
             // Jones vectors
@@ -48,11 +48,11 @@ class PolBeam
         
         // this function will go away as it should live on
         // the Python side of things.
-        void make_unpol_gaussian_elliptical_beam
+        void make_unpol_gaussian_elliptical_beams
         ( 
             double fwhmx, 
 			double fwhmy, 
-			double phi0 
+			double phi0
         );
         
         float* Da_I;
@@ -73,13 +73,14 @@ class PolBeam
         float omQ;
         float omU;
         float omV;
-        
+
+		int  nside;
+        long nPixels;
+
         Healpix_Base hpxBase;    
         
     private:
 
-		int  nside;
-        long nPixels;
 		double rhoMax;
         double epsilon;
         

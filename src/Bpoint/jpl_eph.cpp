@@ -40,7 +40,7 @@ int open_ephemeris (char *file_nm = 0)
         return 0;
       }
       fread(&hdr, sizeof(hdr), 1, stream);
-      printf("open ephemeris: size of header = %d \n",sizeof(hdr));
+      printf("open ephemeris: size of header = %ld \n",sizeof(hdr));
       printf("open_ephemeris: number of coefficients = %d \n",hdr.num_coeff);
     }
     return 1;

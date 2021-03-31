@@ -20,15 +20,14 @@ FIND_PATH(HEALPIX_INCLUDE_DIR
 NAMES
         healpix_base.h
 PATHS
-        /usr/local/include/healpix_cxx
+        ~/.local/include/healpix_cxx
 )
 
 FIND_LIBRARY(HEALPIX_LIBRARIES
 NAMES
         healpix_cxx
 PATHS
-        /usr/lib
-        /usr/local/lib
+        ~/.local/lib
 )
 
 

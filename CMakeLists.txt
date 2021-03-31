@@ -1,27 +1,30 @@
 cmake_minimum_required(VERSION 3.9)
 
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake_modules/")
+set(CMAKE_DISABLE_IN_SOURCE_BUILD ON)
+set(CMAKE_DISABLE_SOURCE_CHANGES ON)
+
 project(pixconv
         LANGUAGES CXX
         VERSION 0.1
         DESCRIPTION "Pixel space convolution on the sphere.")
-
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake_modules/")
 
 # enable compilation using standard C++11
 set(CMAKE_CXX_STANDARD 11)
 
 find_package(OpenMP REQUIRED)
 find_package(Healpix REQUIRED)
+find_package(CHealpix REQUIRED)
 find_package(LAPACK REQUIRED)
 find_package(cnpy REQUIRED)
 find_package(Sofa REQUIRED)
 find_package(cfitsio REQUIRED)
 
 # it seems like CMAKE can't find openmp on its own...
-SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp -pthread")
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp -pthread -O0")
 # debug with -O0
-#SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0")
-
+#SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2")
+ 
 # options to compile the cuda code separately
 #set(CUDA_SEPARABLE_COMPILATION OFF)
 #set(CUDA_PROPAGATE_HOST_FLAGS OFF)
@@ -34,7 +37,7 @@ add_executable(test.exe
 )
 
 # shared library
-add_library(libpisco SHARED
+add_library(pisco SHARED
     src/Sky/sky.cpp
     src/Scan/scan.cpp
     src/Bpoint/bpoint.cpp
@@ -48,15 +51,16 @@ add_library(libpisco SHARED
     src/Convolver/convolver.cpp
 )
 
-target_include_directories(libpisco PRIVATE
+target_include_directories(pisco PRIVATE
     ${CNPY_INCLUDE_DIR}
     ${SOFA_INCLUDE_DIR}
     ${OpenMP_INCLUDE_DIRS}
     ${HEALPIX_INCLUDE_DIR}
+    ${CHEALPIX_INCLUDE_DIR}
     ${CFITSIO_INCLUDE_DIR}
 )
 
-target_include_directories(libpisco PUBLIC
+target_include_directories(pisco PUBLIC
 	src/
 )
 
@@ -65,6 +69,7 @@ target_include_directories(test.exe PRIVATE
     ${SOFA_INCLUDE_DIR}
     ${OpenMP_INCLUDE_DIRS}
     ${HEALPIX_INCLUDE_DIR}
+    ${CHEALPIX_INCLUDE_DIR}
     ${CFITSIO_INCLUDE_DIR}
 )
 
@@ -73,13 +78,13 @@ target_include_directories(test.exe PUBLIC
 )
 
 target_link_libraries(test.exe
-    libpisco
+    pisco
     ${CNPY_LIBRARIES}
     ${SOFA_LIBRARIES}
     ${OpenMP_LIBRARIES}
     ${HEALPIX_LIBRARIES}
+    ${CHEALPIX_LIBRARIES}
     ${CFITSIO_LIBRARIES}
-    -lchealpix
     -lopenblas
 )
 
