@@ -40,6 +40,7 @@ class GPUConvolver
 		long nsamples;
 		bool hasBeam;
 		bool hasSky;
+        int parallelLaunches;
         /* Sky has 4 Stokes parameters (I, Q, U, V)*/
         size_t skySize;
         float *skyGPU;
@@ -49,8 +50,10 @@ class GPUConvolver
 		float* bBeamsGPU;
 		/* To store sky pixels seen by the beam. */
         size_t skyPixelsInBeamSize;
-		int* skyPixelsInBeam;
-		int* skyPixelsInBeamGPU;        
+		std::vector<int* >skyPixelsInBeam;
+		std::vector<int* >skyPixelsInBeamGPU;   
+        float** resultGPU;     
+        float** result;     
 };
 
 #endif

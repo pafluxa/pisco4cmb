@@ -1,4 +1,5 @@
 #include <cuda.h>
+#include <omp.h>
 #include <cuda_runtime.h>
 
 #include "Sky/sky.hpp"
@@ -14,6 +15,18 @@ GPUConvolver::GPUConvolver(long _nsamples)
     nsamples = _nsamples;
     hasSky = false;
     hasBeam = false;
+    #pragma omp parallel
+        parallelLaunches = omp_get_num_threads();
+    result = (float**)malloc(sizeof(float*)*parallelLaunches);
+    resultGPU = (float**)malloc(sizeof(float*)*parallelLaunches);
+    for(int i = 0; i < parallelLaunches; i++)
+    {
+        CUDA_ERROR_CHECK(
+                cudaMalloc((void **)&(resultGPU[i]),
+                sizeof(float)*2*CUDACONV::GRID_SIZE)
+        );
+        result[i] = (float*)malloc(sizeof(float)*2*CUDACONV::GRID_SIZE);
+    }
 }
 
 GPUConvolver::~GPUConvolver()
@@ -41,12 +54,22 @@ void GPUConvolver::update_sky(Sky sky)
             cudaMalloc((void **)&skyGPU, 4*skySize)
         );
         skyPixelsInBeamSize = sizeof(int)*sky.size();
-        skyPixelsInBeam = (int*)malloc(skyPixelsInBeamSize);
-        CUDA_ERROR_CHECK(
-            cudaMalloc(
-                (void **)&skyPixelsInBeamGPU, 
-                skyPixelsInBeamSize)
-        );
+        for(int p = 0; p < parallelLaunches; p++)
+        {
+            int* temp;
+            temp = nullptr;            
+            CUDA_ERROR_CHECK(
+                cudaHostAlloc(
+                    (void **)&temp,
+                    skyPixelsInBeamSize,
+                    cudaHostAllocWriteCombined)
+            );
+            skyPixelsInBeamGPU.push_back(temp);
+            
+            temp = (int*)malloc(skyPixelsInBeamSize);
+            skyPixelsInBeam.push_back(temp);
+        }
+        
         hasSky = true;
     }
     
@@ -129,83 +152,95 @@ void GPUConvolver::exec_convolution(
     char polFlag,
     Scan scan, Sky sky, PolBeam beam)
 {
-    int idx;
-    int npixDisc;
-    
-    float da;
-    float db;
-    double ra_bc;
-    double dec_bc;
-    double pa_bc;
-    
-    double rmax;
-    rangeset<int> intraBeamRanges;
 	const double* ra_coords = scan.get_ra_ptr();
 	const double* dec_coords = scan.get_dec_ptr();
 	const double* pa_coords = scan.get_pa_ptr();
 
-    for(long s = 0; s < nsamples; s++) 
+    cudaStream_t streams[parallelLaunches];
+    for(int i=0; i < parallelLaunches; i++)
     {
-        ra_bc = ra_coords[s]; 
-        dec_bc = dec_coords[s]; 
-        pa_bc = pa_coords[s];
-        
-        /* Locate all sky pixels inside the beam for every pointing
-         * direction in the Scan. */
-        rmax = beam.get_rho_max();
-        pointing sc(M_PI_2 - dec_bc, ra_bc);
-        sky.hpxBase.query_disc(sc, rmax, intraBeamRanges);
-        /* Flatten the pixel range list. */
-        idx = 0;
-        for(int r=0; r < intraBeamRanges.nranges(); r++) 
+        cudaStreamCreateWithFlags(
+            &(streams[i]), cudaStreamNonBlocking);
+    }
+
+    #pragma omp parallel default(shared)
+    {   
+        int idx;
+        int npixDisc;
+    
+        double ra_bc;
+        double dec_bc;
+        double pa_bc;
+    
+        int lid = omp_get_thread_num();
+        for(long s = lid; s < nsamples; s += parallelLaunches) 
         {
-            int s = intraBeamRanges.ivbegin(r);
-            int e = intraBeamRanges.ivend(r);
-            for(int i=s; i < e; i++) 
+            int lid = omp_get_thread_num();
+            double rmax;
+            rangeset<int> intraBeamRanges;
+            ra_bc = ra_coords[s]; 
+            dec_bc = dec_coords[s]; 
+            pa_bc = pa_coords[s];
+            
+            /* Locate all sky pixels inside the beam for 
+             * every pointing direction in the Scan. */
+            rmax = beam.get_rho_max();
+            pointing sc(M_PI_2 - dec_bc, ra_bc);
+            sky.hpxBase.query_disc(sc, rmax, intraBeamRanges);
+            /* Flatten the pixel range list. */
+            idx = 0;
+            for(int r=0; r < intraBeamRanges.nranges(); r++) 
             {
-                skyPixelsInBeam[idx] = i;
-                idx++;
+                int s = intraBeamRanges.ivbegin(r);
+                int e = intraBeamRanges.ivend(r);
+                for(int i=s; i < e; i++) 
+                {
+                    skyPixelsInBeam[lid][idx] = i;
+                    idx++;
+                }
             }
+            npixDisc = idx;
+            CUDA_ERROR_CHECK(
+                cudaMemcpyAsync(
+                    skyPixelsInBeamGPU[lid],
+                    skyPixelsInBeam[lid],
+                    npixDisc*sizeof(int),
+                    cudaMemcpyHostToDevice,
+                    streams[lid])
+            );
+            /* "Multiply" sky times the beam. */
+            CUDACONV::beam_times_sky(
+                ra_bc, dec_bc, pa_bc, 
+                beam.get_nside(), beam.size(), 
+                aBeamsGPU, bBeamsGPU,
+                sky.get_nside(), skyGPU, 
+                npixDisc, skyPixelsInBeamGPU[lid],
+                streams[lid],
+                resultGPU[lid]);
+            
+            cudaStreamSynchronize(streams[lid]);
+            
+            CUDA_ERROR_CHECK(
+                cudaMemcpy(
+                    result[lid], 
+                    resultGPU[lid], 
+                    sizeof(float)*2*CUDACONV::GRID_SIZE,
+                    cudaMemcpyDeviceToHost)
+            );
+            float resultA = 0.0;
+            float resultB = 0.0;
+            /* bring the buffer back. */
+            for(int i = 0; i < CUDACONV::GRID_SIZE; i++)
+            {
+                resultA += result[lid][2*i];
+                //resultB += result[lid][2*i+1];
+            }
+            data_a[s] = resultA;
         }
-        
-        npixDisc = idx;
-        CUDA_ERROR_CHECK(
-            cudaMemcpy(
-                skyPixelsInBeamGPU,
-                skyPixelsInBeam,
-                npixDisc*sizeof(int),
-                cudaMemcpyHostToDevice)
-        );
-        /* "Multiply" sky times the beam. */
-        da = 1.0;
-        db = 1.0;
-        CUDACONV::beam_times_sky
-        (
-            ra_bc, dec_bc, pa_bc, 
-            beam.get_nside(), beam.size(), 
-            aBeamsGPU, bBeamsGPU,
-            sky.get_nside(), skyGPU, 
-            npixDisc, skyPixelsInBeamGPU,
-            &da, &db
-        );
-        /* Write data back to appropiate buffer. */
-        if(polFlag == 'a')
-        {
-            data_a[s] = da;
-        }
-        else if (polFlag == 'b')
-        {
-            data_b[s] = db;
-        }
-        else if (polFlag == 'p')
-        {
-            data_a[s] = da;
-            data_b[s] = db;
-        }
-        else
-        {
-            throw std::invalid_argument(\
-                "valid polFlags are 'a', 'b' and 'p'" );
-        }
-    }  
+    }
+    
+    for(int i = 0; i < parallelLaunches; i++)
+    {
+        cudaStreamDestroy(streams[i]);
+    }
 }

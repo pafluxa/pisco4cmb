@@ -12,8 +12,8 @@ project(pixconv
 # enable compilation using standard C++11
 set(CMAKE_CXX_STANDARD 11)
 
-set(CMAKE_CUDA_FLAGS "-Wall -g -G")
-set(CMAKE_CUDA_FLAGS_DEBUG "-g -G -Wall")
+set(CMAKE_CUDA_FLAGS "-Wall -lgomp -O3 --default-stream per-thread  -Xcompiler -fopenmp")
+#set(CMAKE_CUDA_FLAGS_DEBUG "-g -G -Wall")
 
 find_package(OpenMP REQUIRED)
 find_package(Healpix REQUIRED)
@@ -25,8 +25,8 @@ find_package(cfitsio REQUIRED)
 find_package(CUDA REQUIRED)
 
 # it seems like CMAKE can't find openmp on its own...
-#SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp -pthread -O2")
-SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2")
+SET(CMAKE_CXX_FLAGS 
+  "${CMAKE_CXX_FLAGS} -march=native -fopenmp -pthread -O3")
  
 # options to compile the cuda code separately
 set(CUDA_SEPARABLE_COMPILATION OFF)
@@ -37,6 +37,11 @@ set(CUDA_HOST_COMPILER g++)
 # executable
 cuda_add_executable(wholesky_convolution_gpu.exe
     src/wholesky_convolution_gpu.cpp
+)
+
+# executable
+cuda_add_executable(wholesky_convolution_cpu.exe
+    src/wholesky_convolution_cpu.cpp
 )
 
 # shared library
@@ -82,7 +87,16 @@ target_include_directories(cudaconvolution PRIVATE
 
 target_include_directories(
 wholesky_convolution_gpu.exe PRIVATE
-# includes
+    ${CNPY_INCLUDE_DIR}
+    ${SOFA_INCLUDE_DIR}
+    ${OpenMP_INCLUDE_DIRS}
+    ${HEALPIX_INCLUDE_DIR}
+    ${CHEALPIX_INCLUDE_DIR}
+    ${CFITSIO_INCLUDE_DIR}
+)
+
+target_include_directories(
+wholesky_convolution_cpu.exe PRIVATE
     ${CNPY_INCLUDE_DIR}
     ${SOFA_INCLUDE_DIR}
     ${OpenMP_INCLUDE_DIRS}
@@ -94,6 +108,23 @@ wholesky_convolution_gpu.exe PRIVATE
 target_include_directories(wholesky_convolution_gpu.exe PUBLIC
 	src/
 )
+
+target_include_directories(wholesky_convolution_cpu.exe PUBLIC
+	src/
+)
+
+target_link_libraries(wholesky_convolution_cpu.exe
+    pisco
+    ${CUDA_LIBRARIES}
+    ${CNPY_LIBRARIES}
+    ${SOFA_LIBRARIES}
+    ${OpenMP_LIBRARIES}
+    ${HEALPIX_LIBRARIES}
+    ${CHEALPIX_LIBRARIES}
+    ${CFITSIO_LIBRARIES}
+    -lopenblas
+)
+
 
 target_link_libraries(wholesky_convolution_gpu.exe
     pisco
