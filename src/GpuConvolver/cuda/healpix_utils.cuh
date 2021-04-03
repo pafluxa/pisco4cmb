@@ -4,6 +4,8 @@
 #include <cuda.h>
 #include "cuda/healpix_math.cuh"
 
+namespace cuHealpix
+{
 // Ported from Healpix_base.cc
 __device__ int
 ring_above (int nside_, double z) 
@@ -140,7 +142,7 @@ get_ring_info2 (int nside_, int ring, int *startpix, int *ringpix, double *theta
 
 // Ported from Healpix_base.cc
 __device__ int
-cuHealpix_ang2pix( int nside_map, double tht, double phi )
+ang2pix( int nside_map, double tht, double phi )
 {
     int map_pix;
     double cth=cos(tht);
@@ -151,7 +153,7 @@ cuHealpix_ang2pix( int nside_map, double tht, double phi )
 
 // Ported from Healpix_base.cc
 __device__ void 
-cuHealpix_pix2ang(long nside, long ipix, double *theta, double *phi)                                          
+pix2ang(long nside, long ipix, double *theta, double *phi)                                          
 {                                                                                                           
   double z;                                                                                                   
   pix2ang_ring_z_phi (nside,ipix,&z,phi);                                                                     
@@ -160,7 +162,7 @@ cuHealpix_pix2ang(long nside, long ipix, double *theta, double *phi)
 
 // Ported from Healpix_base.cc
 __device__ void
-cuHealpix_interpolate( int nside_, double theta, double phi, int pix[4], double wgt[4] )
+get_interpol( int nside_, double theta, double phi, int pix[4], double wgt[4] )
 {
   int npix_ = 12*nside_*nside_;
   double z = cos (theta);                                                                                 
@@ -223,4 +225,6 @@ cuHealpix_interpolate( int nside_, double theta, double phi, int pix[4], double 
     }                                                                                                         
 }
 
+// end namespace
+}
 #endif

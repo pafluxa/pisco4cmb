@@ -3,6 +3,9 @@
 
 #include <math.h>
 
+namespace cuSphericalTransformations
+{
+    
 __device__
 void rho_sigma_chi_pix(double *rho, double *sigma, double *chi,
                        double  ra_bc, double dec_bc, double  psi_bc,
@@ -36,6 +39,9 @@ void rho_sigma_chi_pix(double *rho, double *sigma, double *chi,
   double crho  = sdc * sdp + cdc * cdp * cd;
   if(crho >= 1.0)*rho = 0.0;
   else *rho = acos(crho);
+  /* NVIDIA: we are 100% IEE794 complaint.
+     Me: hold my beer. 
+     (this corner case was figured out by Michael Brewer) */ 
   if(*rho > 1.0e-6) { 
     beta  = atan2(sd * cdc, sdc * cdp - cdc * sdp * cd);  
     alpha = atan2(sd * cdp, sdp * cdc - cdp * sdc * cd);
@@ -53,4 +59,6 @@ void rho_sigma_chi_pix(double *rho, double *sigma, double *chi,
   
 }
 
+// end namespace
+} 
 #endif

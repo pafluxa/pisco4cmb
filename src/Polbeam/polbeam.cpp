@@ -17,11 +17,29 @@ PolBeam::PolBeam(int nside, long nPixels) :
 
     rhoMax = p.theta;
     alloc_buffers();
+
+    aBeams[0] = Da_I;
+    bBeams[0] = Db_I; 
+
+    aBeams[1] = Da_Qcos;  
+    bBeams[1] = Db_Qcos;  
+    
+    aBeams[2] = Da_Qsin;
+    bBeams[2] = Db_Qsin;
+    
+    aBeams[3] = Da_Ucos;
+    bBeams[3] = Db_Ucos;
+    
+    aBeams[4] = Da_Usin;
+    bBeams[4] = Db_Usin;
+
+    aBeams[5] = Da_V; 
+    bBeams[5] = Db_V; 
 }
 
 PolBeam::~PolBeam()
 {
-    free_buffers();
+    //free_buffers();
 }
 
 void PolBeam::alloc_buffers()

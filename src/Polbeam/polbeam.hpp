@@ -55,6 +55,9 @@ class PolBeam
 			double phi0
         );
         
+        float* aBeams[6];
+        float* bBeams[6];
+        
         float* Da_I;
         float* Da_Qcos;
         float* Da_Qsin;

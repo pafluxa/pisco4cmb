@@ -12,9 +12,7 @@ Convolver::Convolver(unsigned long _nsamples)
 {
     // get active number of threads
     nthreads = omp_get_num_threads();	
-    nsamples = _nsamples;
-    masterBuffer = (float*)malloc(sizeof(float)*nsamples);
-	
+    nsamples = _nsamples;	
     int chunkSize = nsamples/nthreads;
     int it = 0;	
     int s = 0;
@@ -35,9 +33,7 @@ Convolver::Convolver(unsigned long _nsamples)
 }
 
 Convolver::~Convolver()
-{
-    free(masterBuffer);
-    
+{    
     bufferStart.clear();
     bufferEnd.clear();
 }
@@ -49,10 +45,6 @@ void Convolver::exec_convolution(
 	Sky& sky,
 	PolBeam& beam) 
 {
-    float res;
-    unsigned long s;
-    unsigned long local;
-
     // convenience pointers
 	const double* ra_coords = scan.get_ra_ptr();
 	const double* dec_coords = scan.get_dec_ptr();
@@ -189,21 +181,13 @@ void Convolver::beam_times_sky(
             {
                 for(int i=0; i < 4; i++) 
                 {
-                    // yes I am being cheap here
                     ni = neigh[i];
-                    if(ni > beam.nPixels)
-                    {
-                        ww = 0.0;
-                    }
-                    else
-                    {
-                        ww = wgh[i];
-                    }
+                    ww = ni > beam.size() ? 0.0: wgh[i];
                     beam_a[b] += double(bpa[b][ni])*ww;
                     beam_b[b] += double(bpb[b][ni])*ww;
                 }
             }
-            // data = beam x sky
+            // data = beam x sky*
             /* memory help below
              * 
              * beam_a[0] = Da_I;
@@ -222,10 +206,6 @@ void Convolver::beam_times_sky(
               + sky.sU[skyPix]*(beam_b[3]*c2chi + beam_b[4]*s2chi);
 		}
 	}
-    if(abs(data_a) < 1e-10)
-        data_a = 0.0;
-    if(abs(data_b) < 1e-10)
-        data_b = 0.0;
 	(*da) = (float)(data_a);
 	(*db) = (float)(data_b);
 }

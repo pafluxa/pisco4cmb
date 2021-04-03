@@ -17,8 +17,6 @@ class Convolver
 
         Convolver(unsigned long nsamples);
        ~Convolver();
-        //bool set_threads( unsigned int n );
-        //unsigned int get_threads( void );
         void exec_convolution(
             float* data_a, float* data_b,
             char polFlag,

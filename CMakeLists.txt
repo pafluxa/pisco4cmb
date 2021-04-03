@@ -5,12 +5,15 @@ set(CMAKE_DISABLE_IN_SOURCE_BUILD ON)
 set(CMAKE_DISABLE_SOURCE_CHANGES ON)
 
 project(pixconv
-        LANGUAGES CXX
+        LANGUAGES CXX CUDA
         VERSION 0.1
         DESCRIPTION "Pixel space convolution on the sphere.")
 
 # enable compilation using standard C++11
 set(CMAKE_CXX_STANDARD 11)
+
+set(CMAKE_CUDA_FLAGS "-Wall -g -G")
+set(CMAKE_CUDA_FLAGS_DEBUG "-g -G -Wall")
 
 find_package(OpenMP REQUIRED)
 find_package(Healpix REQUIRED)
@@ -19,25 +22,25 @@ find_package(LAPACK REQUIRED)
 find_package(cnpy REQUIRED)
 find_package(Sofa REQUIRED)
 find_package(cfitsio REQUIRED)
+find_package(CUDA REQUIRED)
 
 # it seems like CMAKE can't find openmp on its own...
-SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp -pthread -O0")
-# debug with -O0
-#SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2")
+#SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp -pthread -O2")
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2")
  
 # options to compile the cuda code separately
-#set(CUDA_SEPARABLE_COMPILATION OFF)
-#set(CUDA_PROPAGATE_HOST_FLAGS OFF)
-#set(CUDA_HOST_COMPILER g++)
+set(CUDA_SEPARABLE_COMPILATION OFF)
+set(CUDA_PROPAGATE_HOST_FLAGS OFF)
+set(CUDA_HOST_COMPILER g++)
 #set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --default-stream per-thread" )
 
 # executable
-add_executable(test.exe
-    src/main.cpp
+cuda_add_executable(wholesky_convolution_gpu.exe
+    src/wholesky_convolution_gpu.cpp
 )
 
 # shared library
-add_library(pisco SHARED
+add_library(pisco STATIC
     src/Sky/sky.cpp
     src/Scan/scan.cpp
     src/Bpoint/bpoint.cpp
@@ -49,6 +52,7 @@ add_library(pisco SHARED
     src/Polbeam/polbeam.cpp
     src/Sphtrigo/sphtrigo.cpp
     src/Convolver/convolver.cpp
+    src/GpuConvolver/gpuconvolver.cpp
 )
 
 target_include_directories(pisco PRIVATE
@@ -64,7 +68,21 @@ target_include_directories(pisco PUBLIC
 	src/
 )
 
-target_include_directories(test.exe PRIVATE
+cuda_add_library(cudaconvolution STATIC
+    src/GpuConvolver/cuda/beam_times_sky.cu
+    src/GpuConvolver/cuda/beam_times_sky.h
+    src/GpuConvolver/cuda/healpix_math.cuh
+    src/GpuConvolver/cuda/healpix_utils.cuh
+    src/GpuConvolver/cuda/sphtrigo.cuh
+)
+
+target_include_directories(cudaconvolution PRIVATE
+    src/GpuConvolver
+)
+
+target_include_directories(
+wholesky_convolution_gpu.exe PRIVATE
+# includes
     ${CNPY_INCLUDE_DIR}
     ${SOFA_INCLUDE_DIR}
     ${OpenMP_INCLUDE_DIRS}
@@ -73,12 +91,14 @@ target_include_directories(test.exe PRIVATE
     ${CFITSIO_INCLUDE_DIR}
 )
 
-target_include_directories(test.exe PUBLIC
+target_include_directories(wholesky_convolution_gpu.exe PUBLIC
 	src/
 )
 
-target_link_libraries(test.exe
+target_link_libraries(wholesky_convolution_gpu.exe
     pisco
+    cudaconvolution
+    ${CUDA_LIBRARIES}
     ${CNPY_LIBRARIES}
     ${SOFA_LIBRARIES}
     ${OpenMP_LIBRARIES}

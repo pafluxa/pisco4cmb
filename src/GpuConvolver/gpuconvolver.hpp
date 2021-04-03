@@ -5,68 +5,52 @@
 #ifndef _GPUCONVOLVERH
 #define _GPUCONVOLVERH
 
-#include <cuda.h>
-#include <cuda_runtime.h>
+#include "Sky/sky.hpp"
+#include "Scan/scan.hpp"
+#include "Polbeam/polbeam.hpp"
 
-#include "sky.hpp"
-#include "scan.hpp"
-#include "polbeam.hpp"
-
-class GpuConvolver
+class GPUConvolver
 {
     public:
     
-        GpuConvolver( unsigned long nsamples, unsigned int nstreams = 1 );
-       ~GpuConvolver();
-
-		void set_beam(PolBeam& beam);
-		void set_sky(Sky& sky, double rhoMax );
-		void set_detector_angle( double angle ){ _detAngle = angle; }
-		
-		bool set_threads( unsigned int n );
-		unsigned int get_threads( void );
-		
-		void exec_convolution( float* convData, Scan& scan, Sky& sky, PolBeam& beam  );
+        GPUConvolver(long nsamples);
+       ~GPUConvolver();
+        
+        /* Transfers beams from host to device. First call also 
+         * allocates respective buffers.
+         */
+		void update_beam(PolBeam beam);
+		/* Transfer sky from host to devices. First call also allocates
+         * respective buffers.
+         */
+        void update_sky(Sky sky);
+        /* Runs convolution algorithm using a Scan. Store the resulting
+         * data stream in data_a/b, which is expected to be allocated.
+         * polFlag indicates which of the buffers (data_a, data_b or 
+         * both) will be used ('a', 'b' or 'p' for pair).
+         */
+		void exec_convolution( 
+            float* data_a,
+            float* data_b,
+            char polFlag,
+            Scan scan, Sky sky, PolBeam beam  );
 		
     private:
 
-		unsigned long _nsamples;
-		unsigned int  _nstreams;
-		
-		bool _hasBeam;
-		bool _hasSky;
-		
-		size_t  _skyBufferSize;
-	    size_t _beamBufferSize;
-	    size_t _discBufferSize;
-		
-		float* _gpu_beamI;
-		float* _gpu_beamQ;
-		float* _gpu_beamU;
-		
-		float* _gpu_skyI;
-		float* _gpu_skyQ;
-		float* _gpu_skyU;
-
-		float* _gpu_phi;
-		float* _gpu_theta;
-		float* _gpu_psi;
-		
-		double _detAngle;
-		
-		std::vector<int*> _cpuDiscBuffers;
-		std::vector<int*> _gpuDiscBuffers;
-		
-		// to store n_stream outputs of the GPU
-		std::vector<float*> _gpuBlockConvBuffers;
-		std::vector<float*> _cpuBlockConvBuffers;
-		
-		// to store n_streams partial outputs
-		std::vector<float*> _cpuConvBuffers;
-		
-		std::vector<cudaStream_t> _gpuStreams;
-
-		void _beam_times_sky( Sky& sky, PolBeam &beam, float phi0, float theta0, float psi0, int streamId );
+		long nsamples;
+		bool hasBeam;
+		bool hasSky;
+        /* Sky has 4 Stokes parameters (I, Q, U, V)*/
+        size_t skySize;
+        float *skyGPU;
+        /* Each beam has 6 componets*/
+        size_t beamSize;
+		float* aBeamsGPU;
+		float* bBeamsGPU;
+		/* To store sky pixels seen by the beam. */
+        size_t skyPixelsInBeamSize;
+		int* skyPixelsInBeam;
+		int* skyPixelsInBeamGPU;        
 };
 
 #endif
