@@ -23,31 +23,51 @@ GPUConvolver::GPUConvolver(int _nsamples, CUDACONV::RunConfig cfg)
     resultBufferSize = 2*chunkSize*sizeof(float);
     nPixelInDiscBufferSize = chunkSize*sizeof(int);
     ptgBufferSize = N_POINTING_COORDS*chunkSize*sizeof(double);
-    skyPixelsInBeamBufferSize = \
-        chunkSize*cfg.MAX_PIXELS_PER_DISC*sizeof(int);
+    skyPixelsInBeamBufferSize = chunkSize*cfg.MAX_PIXELS_PER_DISC*sizeof(int);
     
     // allocate buffers to store pointing
-    ptgBuffer = (double*)malloc(ptgBufferSize);
+    //ptgBuffer = (double*)malloc(ptgBufferSize);
     CUDA_ERROR_CHECK(
-        cudaMalloc((void **)&ptgBufferGPU, 
+        cudaMallocHost(
+            (void **)&ptgBuffer, 
+            ptgBufferSize)
+    );
+    CUDA_ERROR_CHECK(
+        cudaMalloc(
+            (void **)&ptgBufferGPU, 
             ptgBufferSize)
     );
     // to store sky pixels
-    skyPixelsInBeam = (int*)malloc(skyPixelsInBeamBufferSize);
+    //skyPixelsInBeam = (int*)malloc(skyPixelsInBeamBufferSize);
+    CUDA_ERROR_CHECK(
+        cudaMallocHost(
+            (void **)&skyPixelsInBeam, 
+            skyPixelsInBeamBufferSize)
+    );
     CUDA_ERROR_CHECK(
         cudaMalloc(
             (void **)&skyPixelsInBeamGPU, 
             skyPixelsInBeamBufferSize)
     );
     // to store the largest pixel in the disc
-    nPixelsInDisc = (int*)malloc(nPixelInDiscBufferSize);
+    //nPixelsInDisc = (int*)malloc(nPixelInDiscBufferSize);
+    CUDA_ERROR_CHECK(
+        cudaMallocHost(
+            (void **)&nPixelsInDisc, 
+            nPixelInDiscBufferSize)
+    );
     CUDA_ERROR_CHECK(
         cudaMalloc(
             (void **)&nPixelsInDiscGPU, 
             nPixelInDiscBufferSize)
     );
     // to store the result from the GPU
-    result = (float *)malloc(resultBufferSize);
+    //result = (float *)malloc(resultBufferSize);
+    CUDA_ERROR_CHECK(
+        cudaMallocHost(
+            (void **)&result, 
+            resultBufferSize)
+    );
     CUDA_ERROR_CHECK(
         cudaMalloc(
             (void **)&resultGPU, 
@@ -66,16 +86,11 @@ void GPUConvolver::update_sky(CUDACONV::RunConfig cfg, Sky sky)
     skyBufferSize = 4*sizeof(float)*nspixels;
     float* skyTransponsed;
     skyTransponsed = (float*)malloc(skyBufferSize);
-    //if(!hasSky)
-    //{
     CUDA_ERROR_CHECK(
         cudaMalloc(
             (void **)&skyGPU, 
             skyBufferSize)
     );
-    //    hasSky = true;
-    //}
-    
     for(long i = 0; i < sky.size(); i++)
     {
         skyTransponsed[4*i + 0] = sky.sI[i];
@@ -165,7 +180,6 @@ void GPUConvolver::exec_convolution(
     PolBeam beam)
 {
     int p;
-    int idx;
     double rmax = beam.get_rho_max();
     
 	const double* ra_coords = scan.get_ra_ptr();
@@ -173,6 +187,7 @@ void GPUConvolver::exec_convolution(
 	const double* pa_coords = scan.get_pa_ptr();
     for(long s = 0; s < nsamples; s += chunkSize) 
     {
+        //#pragma omp parallel for default(shared)
         for(int lid = 0; lid < chunkSize; lid++)
         {
             ptgBuffer[4*lid+0] = ra_coords[s+lid]; 
@@ -182,11 +197,10 @@ void GPUConvolver::exec_convolution(
             /* Locate all sky pixels inside the beam for 
              * every pointing direction in the Scan. */
             rangeset<int> intraBeamRanges;
-            rmax = beam.get_rho_max();
             pointing sc(M_PI_2 - dec_coords[s+lid], ra_coords[s+lid]);
             sky.hpxBase.query_disc(sc, rmax, intraBeamRanges);
             /* Flatten the pixel range list. */
-            idx = 0;
+            int idx = 0;
             p = lid*cfg.MAX_PIXELS_PER_DISC;
             for(int r=0; r < intraBeamRanges.nranges(); r++) {
                 int ss = intraBeamRanges.ivbegin(r);
@@ -201,7 +215,7 @@ void GPUConvolver::exec_convolution(
         
         // send pointing to gpu.
         CUDA_ERROR_CHECK(
-            cudaMemcpy(
+            cudaMemcpyAsync(
                 ptgBufferGPU,
                 ptgBuffer,
                 ptgBufferSize,
@@ -210,7 +224,7 @@ void GPUConvolver::exec_convolution(
         
         // send sky pixels in beam to gpu.
         CUDA_ERROR_CHECK(
-            cudaMemcpy(
+            cudaMemcpyAsync(
                 skyPixelsInBeamGPU,
                 skyPixelsInBeam,
                 skyPixelsInBeamBufferSize,
@@ -219,14 +233,12 @@ void GPUConvolver::exec_convolution(
         
         //// send max pixel number to gpu.
         CUDA_ERROR_CHECK(
-            cudaMemcpy(
+            cudaMemcpyAsync(
                 nPixelsInDiscGPU,
                 nPixelsInDisc,
                 nPixelInDiscBufferSize,
                 cudaMemcpyHostToDevice)
         );
-        
-        CUDA_ERROR_CHECK(cudaDeviceSynchronize());
         
         // "Multiply" sky times the beam. */
         beam_times_sky2(
