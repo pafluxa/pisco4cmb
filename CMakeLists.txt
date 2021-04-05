@@ -12,8 +12,10 @@ project(pixconv
 # enable compilation using standard C++11
 set(CMAKE_CXX_STANDARD 11)
 
-set(CMAKE_CUDA_FLAGS "-Wall -lgomp -O3 --default-stream per-thread  -Xcompiler -fopenmp")
-#set(CMAKE_CUDA_FLAGS_DEBUG "-g -G -Wall")
+#set(CMAKE_CUDA_FLAGS "-Wall -lgomp -O3 --default-stream per-thread  -Xcompiler -fopenmp")
+set(CMAKE_CUDA_FLAGS_DEBUG "-g -G -Wall -O0")
+set(CMAKE_CFLAGS_DEBUG "-g -G -Wall -O0")
+set(CMAKE_CXXFLAGS_DEBUG "-g -G -Wall -O0")
 
 find_package(OpenMP REQUIRED)
 find_package(Healpix REQUIRED)
@@ -58,6 +60,7 @@ add_library(pisco STATIC
     src/Sphtrigo/sphtrigo.cpp
     src/Convolver/convolver.cpp
     src/GpuConvolver/gpuconvolver.cpp
+    src/GpuConvolver/cuda/beam_times_sky.h
 )
 
 target_include_directories(pisco PRIVATE

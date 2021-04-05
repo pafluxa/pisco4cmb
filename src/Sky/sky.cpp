@@ -4,7 +4,8 @@
 Sky::Sky( 
 	int _nside, 
 	const float* I,  
-	const float* Q, const float* U, 
+	const float* Q, 
+    const float* U, 
 	const float* V)
 {
     nside = _nside;
@@ -15,9 +16,4 @@ Sky::Sky(
 	sQ = Q;
 	sU = U;
 	sV = V;
-    
-    mapPointers[0] = sI;
-    mapPointers[1] = sQ;
-    mapPointers[2] = sU;
-    mapPointers[3] = sV;
 }

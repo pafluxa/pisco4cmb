@@ -8,12 +8,13 @@
 #include "Sky/sky.hpp"
 #include "Scan/scan.hpp"
 #include "Polbeam/polbeam.hpp"
+#include "GpuConvolver/cuda/beam_times_sky.h"
 
 class GPUConvolver
 {
     public:
     
-        GPUConvolver(long nsamples);
+        GPUConvolver(int nsamples, CUDACONV::RunConfig);
        ~GPUConvolver();
         
         /* Transfers beams from host to device. First call also 
@@ -23,13 +24,14 @@ class GPUConvolver
 		/* Transfer sky from host to devices. First call also allocates
          * respective buffers.
          */
-        void update_sky(Sky sky);
+        void update_sky(CUDACONV::RunConfig cfg, Sky sky);
         /* Runs convolution algorithm using a Scan. Store the resulting
          * data stream in data_a/b, which is expected to be allocated.
          * polFlag indicates which of the buffers (data_a, data_b or 
          * both) will be used ('a', 'b' or 'p' for pair).
          */
 		void exec_convolution( 
+            CUDACONV::RunConfig c, 
             float* data_a,
             float* data_b,
             char polFlag,
@@ -37,23 +39,32 @@ class GPUConvolver
 		
     private:
 
-		long nsamples;
+		int nsamples;
 		bool hasBeam;
 		bool hasSky;
-        int parallelLaunches;
+        int chunkSize;
         /* Sky has 4 Stokes parameters (I, Q, U, V)*/
-        size_t skySize;
         float *skyGPU;
+        size_t skyBufferSize;
         /* Each beam has 6 componets*/
-        size_t beamSize;
 		float* aBeamsGPU;
 		float* bBeamsGPU;
-		/* To store sky pixels seen by the beam. */
-        size_t skyPixelsInBeamSize;
-		std::vector<int* >skyPixelsInBeam;
-		std::vector<int* >skyPixelsInBeamGPU;   
-        float** resultGPU;     
-        float** result;     
+        size_t beamBufferSize;
+		/* buffers to store intra-beam sky pixels. */
+		int* nPixelsInDisc;
+		int* nPixelsInDiscGPU;
+        size_t nPixelInDiscBufferSize;
+        int* skyPixelsInBeam;
+		int* skyPixelsInBeamGPU;
+        size_t skyPixelsInBeamBufferSize;
+        /* buffer to store pointing*/
+        double* ptgBuffer;
+        double* ptgBufferGPU;
+        size_t ptgBufferSize;
+        /* buffer to store result.*/
+        float* result;     
+        float* resultGPU;     
+        size_t resultBufferSize;
 };
 
 #endif

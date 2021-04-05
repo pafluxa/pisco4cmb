@@ -30,7 +30,6 @@ class Sky
 		const float* sQ;
 		const float* sU;
 		const float* sV;
-        const float* mapPointers[4];
         
     private:
 		
