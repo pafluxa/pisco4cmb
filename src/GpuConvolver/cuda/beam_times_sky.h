@@ -1,6 +1,7 @@
 #ifndef CUDACONVH__
 #define CUDACONVH__
 #define MAXDISCSIZE 10000
+
 namespace CUDACONV
 {
     struct CUDACONVConf_t

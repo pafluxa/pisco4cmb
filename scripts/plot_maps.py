@@ -4,31 +4,39 @@ import healpy
 import numpy
 import matplotlib.pyplot as plt
 
-I1, Q1, U1, V1 = numpy.loadtxt('maps_input.txt', unpack=True)
-I2, Q2, U2 = numpy.loadtxt('maps_output.txt', unpack=True)
+map1 = sys.argv[1]
+map2 = sys.argv[2]
+I1, Q1, U1, V1 = numpy.loadtxt(map1, unpack=True)
+I2, Q2, U2 = numpy.loadtxt(map2, unpack=True)
 
 # normalize
 Is, Qs, Us = healpy.smoothing(
-    (I1, Q1, U1), fwhm=numpy.deg2rad(2.0), pol=True)
+    (I1, Q1, U1), fwhm=numpy.deg2rad(1.0), pol=True)
+
+I2 = I2/(4/numpy.pi*347.227)**0.5
+Q2 = Q2/(4/numpy.pi*347.227)**0.5
+U2 = U2/(4/numpy.pi*347.227)**0.5
+
+print(numpy.sum(Is)/numpy.sum(I2))
 
 I1m = healpy.gnomview(Is, rot=(180, 0.0, 0.0),
-    reso=5.0, xsize=200, ysize=200,
+    reso=2.0, xsize=400, ysize=400,
     no_plot=True, return_projected_map=True)
 Q1m = healpy.gnomview(Qs, rot=(180, 0.0, 0.0),
-    reso=5.0, xsize=200, ysize=200,
+    reso=2.0, xsize=400, ysize=400,
     no_plot=True, return_projected_map=True)
 U1m = healpy.gnomview(Us, rot=(180, 0.0, 0.0),
-    reso=5.0, xsize=200, ysize=200,
+    reso=2.0, xsize=400, ysize=400,
     no_plot=True, return_projected_map=True)
 
 I2m = healpy.gnomview(I2, rot=(180, 0.0, 0.0),
-    reso=5.0, xsize=200, ysize=200,
+    reso=2.0, xsize=400, ysize=400,
     no_plot=True, return_projected_map=True)
 Q2m = healpy.gnomview(Q2, rot=(180, 0.0, 0.0),
-    reso=5.0, xsize=200, ysize=200,
+    reso=2.0, xsize=400, ysize=400,
     no_plot=True, return_projected_map=True)
 U2m = healpy.gnomview(U2, rot=(180, 0.0, 0.0),
-    reso=5.0, xsize=200, ysize=200,
+    reso=2.0, xsize=400, ysize=400,
     no_plot=True, return_projected_map=True)
 
 fix, axes = plt.subplots(2, 3, figsize=(12, 5))

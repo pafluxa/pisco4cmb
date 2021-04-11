@@ -2,66 +2,64 @@ import healpy
 import numpy
 import matplotlib.pyplot as plt
 
-# get window function of appropiate beam
-Bl_T, Bl_E, Bl_B, Bl_TE = \
-    healpy.gauss_beam(fwhm=numpy.deg2rad(1.0), lmax=1024, pol=True).T
-pwT, pwP = healpy.pixwin(256, pol=True, lmax=2014)
-
 I1, Q1, U1, V1 = numpy.loadtxt('maps_input.txt', unpack=True)
+
 I2, Q2, U2 = numpy.loadtxt('maps_output.txt', unpack=True)
+# manual normalization by beam solid angle
+I2 = I2/(778.241*1e-6)**0.5
+Q2 = Q2/(778.241*1e-6)**0.5
+U2 = U2/(778.241*1e-6)**0.5
 
-# normalize
-Is, Qs, Us = healpy.smoothing((I1, Q1, U1),\
-    fwhm=numpy.deg2rad(1.0),
-    pol=True)
-pwr1 = numpy.sum(Is) + numpy.sqrt(numpy.sum(Qs)**2 + numpy.sum(Us)**2)
-pwr2 = numpy.sum(I2) + numpy.sqrt(numpy.sum(Q2)**2 + numpy.sum(U2)**2)
-r = pwr1/pwr2
-I2 *= r
-Q2 *= r
-U2 *= r
+cells = numpy.loadtxt('./data/cls/lcdm_cls_r=0.0010.dat')
+TTRef = cells[1]
+EERef = cells[2]
+BBRef = cells[3]
+BBlmax = len(BBRef)
 
-#healpy.mollview(Us, title='U smooth')
-#healpy.mollview(U2, title='U pisco')
-#plt.show()
+Is, Qs, Us = healpy.smoothing((I1, Q1, U1), fwhm=numpy.deg2rad(1.0), pol=True)
+
+print(numpy.sum(I2)/numpy.sum(Is))
+print(numpy.sum(Q2)/numpy.sum(Qs))
+print(numpy.sum(U2)/numpy.sum(Us))
 
 TT1, EE1, BB1, TE1, EB1, TB1 = healpy.anafast((Is, Qs, Us), pol=True)
 TT2, EE2, BB2, TE2, EB2, TB2 = healpy.anafast((I2, Q2, U2), pol=True)
-ell_max = len(TT1)
-# un-smooth using analytic window function
-TT1 /= Bl_T[:ell_max]**2
-EE1 /= Bl_E[:ell_max]**2
-BB1 /= Bl_B[:ell_max]**2
-TT2 /= (Bl_T[:ell_max]/pwT[:ell_max])**2
-EE2 /= (Bl_E[:ell_max]/pwP[:ell_max])**2
-BB2 /= (Bl_B[:ell_max]/pwP[:ell_max])**2
-
-#TT2 /= pixwin_T**2
-#EE2 /= pixwin_P**2
-#BB2 /= pixwin_P**2
 ell = numpy.arange(len(TT1))
 
 fig, axes = plt.subplots(1, 3, \
-    sharex=True, sharey=True, figsize=(9, 5.7/2.0))
+    sharex=True, figsize=(9, 5.7/2.0))
 # plot stuff
-axes[0].plot(ell*(ell+1)/2.0*TT1, \
+axes[0].plot(ell*(ell+1)*TT1, \
     color='blue', linestyle='dashed', label='TT', alpha=0.7)
-axes[0].plot(ell*(ell+1)/2.0*TT2, \
+axes[0].plot(ell*(ell+1)*TT2, \
     color='red', linestyle='dashdot', label='TT (pisco)', alpha=0.7)
-# EE
-axes[1].plot(ell*(ell+1)/2.0*EE1, \
-    color='blue', linestyle='dashed', label='EE', alpha=0.7)
-axes[1].plot(ell*(ell+1)/2.0*EE2, \
-    color='red', linestyle='dashdot', label='EE (pisco)', alpha=0.7)
-# BB
-axes[2].plot(ell*(ell+1)/2.0*BB1, \
-    color='blue', linestyle='dashed', label='BB', alpha=0.7)
-axes[2].plot(ell*(ell+1)/2.0*BB2, \
-    color='red', linestyle='dashdot', label='BB (pisco)', alpha=0.7)
+axes[0].plot(TTRef[0:760], \
+    color='black', linestyle='dashed', label='TT (ref)', alpha=0.7)
 
+# EE
+axes[1].plot(ell*(ell+1)*EE1, \
+    color='blue', linestyle='dashed', label='EE', alpha=0.7)
+axes[1].plot(ell*(ell+1)*EE2, \
+    color='red', linestyle='dashdot', label='EE (pisco)', alpha=0.7)
+axes[1].plot(EERef[0:760], \
+    color='black', linestyle='dashed', label='EE (ref)', alpha=0.7)
+# BB
+axes[2].plot(ell*(ell+1)*BB1, \
+    color='blue', linestyle='dashed', label='BB', alpha=0.7)
+axes[2].plot(ell*(ell+1)*BB2, \
+    color='red', linestyle='dashdot', label='BB (pisco)', alpha=0.7)
+axes[2].plot(BBRef[0:760], \
+    color='black', linestyle='dashed', label='BB (ref., r=0.001)', alpha=0.7)
+
+idx2sp = {0:'TT', 1:'EE', 2:'BB'}
 for idx, ax in enumerate(axes):
-    ax.set_xlim((2, 750))
-    ax.set_ylim((5e-21, 1e-9))
+    ax.set_xlim((2, 550))
+    if idx == 0:
+        ax.set_ylim((1e-12, 5e-9))
+    if idx == 1:
+        ax.set_ylim((1e-16, 1e-10))
+    if idx == 2:
+        ax.set_ylim((1e-20, 1e-13))
     ax.set_xscale('log')
     ax.set_yscale('log')
     ax.legend()

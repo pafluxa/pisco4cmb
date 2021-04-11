@@ -68,7 +68,7 @@ void Convolver::exec_convolution(
             &da, &db);
         
         if(polFlag == 'a')
-        {
+        {   
             data_a[i] = da;
         }
         else if (polFlag == 'b')
@@ -118,20 +118,6 @@ void Convolver::beam_times_sky(
 	fix_arr< double, 4 >   wgh;
 	rangeset<int> intraBeamRanges;
 	
-    // convienence pointers
-    // 'a' beam
-    bpa[0] = beam.Da_I;
-    bpa[1] = beam.Da_Qcos;
-    bpa[2] = beam.Da_Qsin;
-    bpa[3] = beam.Da_Ucos;
-    bpa[4] = beam.Da_Usin;
-    // 'b' beam
-    bpb[0] = beam.Db_I;
-    bpb[1] = beam.Db_Qcos;
-    bpb[2] = beam.Db_Qsin;
-    bpb[3] = beam.Db_Ucos;
-    bpb[4] = beam.Db_Usin;
-	
     // find sky pixels around beam center, up to beam.rhoMax	
 	rmax = beam.get_rho_max();
 	pointing sc(M_PI_2 - dec_bc, ra_bc);
@@ -163,7 +149,6 @@ void Convolver::beam_times_sky(
             c2chi = cos(2*chi);
             s2chi = sin(2*chi);
             /* uncomment to use Ludwig's second definition
-			
             SphericalTransformations::theta_phi_psi_pix( 
 				&rho,&sigma,&chi,
 				ra_bc , dec_bc, pa_bc,
@@ -182,9 +167,12 @@ void Convolver::beam_times_sky(
                 for(int i=0; i < 4; i++) 
                 {
                     ni = neigh[i];
-                    ww = ni > beam.size() ? 0.0: wgh[i];
-                    beam_a[b] += double(bpa[b][ni])*ww;
-                    beam_b[b] += double(bpb[b][ni])*ww;
+                    if(ni < beam.size())
+                    {
+                        ww = wgh[i];
+                        beam_a[b] += double(beam.aBeams[b][ni])*ww;
+                        beam_b[b] += double(beam.bBeams[b][ni])*ww;
+                    }
                 }
             }
             // data = beam x sky*
@@ -197,15 +185,16 @@ void Convolver::beam_times_sky(
              * beam_a[4] = Da_Usin;
              */
             data_a = data_a 
-              + sky.sI[skyPix]*beam_a[0]
+              + sky.sI[skyPix]*(beam_a[0])
               + sky.sQ[skyPix]*(beam_a[1]*c2chi + beam_a[2]*s2chi)
               + sky.sU[skyPix]*(beam_a[3]*c2chi + beam_a[4]*s2chi);
             data_b = data_b
-              + sky.sI[skyPix]*beam_b[0]
+              + sky.sI[skyPix]*(beam_b[0])
               + sky.sQ[skyPix]*(beam_b[1]*c2chi + beam_b[2]*s2chi)
               + sky.sU[skyPix]*(beam_b[3]*c2chi + beam_b[4]*s2chi);
 		}
 	}
 	(*da) = (float)(data_a);
+    //std::cout << *da << std::endl;
 	(*db) = (float)(data_b);
 }

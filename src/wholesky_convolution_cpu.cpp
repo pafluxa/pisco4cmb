@@ -22,7 +22,7 @@
 // to make use of Healpix_base pointing
 #include <pointing.h>
 
-#define NSIDE_SKY 128
+#define NSIDE_SKY 256
 #define NPIXELS_SKY (12*NSIDE_SKY*NSIDE_SKY)
 // this number needs to be a perfect square for the test to work out!
 // this is the number of pixels in an nside=128 healpix map
@@ -30,11 +30,14 @@
 #define NSAMPLES NPIXELS_SKY
 //#define NSAMPLES NSAMPLES_GRID*NSAMPLES_GRID
 
-
-#define NSIDE_BEAM 512
-// healpy.query_disc( 512, (0,0,1), numpy.radians(5) ).size
-#define NPIXELS_BEAM (5940)
-
+#define NSIDE_BEAM 1024
+/*
+ * import healpy
+ * import numpy
+ * healpy.query_disc(1024, (0,0,1), numpy.radians(5)).size
+ * # > 23980
+*/
+#define NPIXELS_BEAM (23980)
 void init_point_source_scan(
     double ra0, double dec0, double pa0,
     double dra, double ddec,
@@ -103,14 +106,59 @@ int main( void )
     Sky sky(NSIDE_SKY, skyI, skyQ, skyU, skyV);
 
     // setup TOD
-    float *data;
-    data = (float*)malloc(sizeof(float)*NSAMPLES);
+    float *data_a;
+    float *data_b;
+    data_a = (float*)malloc(sizeof(float)*NSAMPLES);
+    data_b = (float*)malloc(sizeof(float)*NSAMPLES);
 
+    // load beam from disk
+    float* magEco_x = (float*)malloc(NPIXELS_BEAM*sizeof(float));
+    float* phaseEco_x = (float*)malloc(NPIXELS_BEAM*sizeof(float));
+    float* magEcx_x = (float*)malloc(NPIXELS_BEAM*sizeof(float)); 
+    float* phaseEcx_x = (float*)malloc(NPIXELS_BEAM*sizeof(float));
+    float* magEco_y = (float*)malloc(NPIXELS_BEAM*sizeof(float));
+    float* phaseEco_y = (float*)malloc(NPIXELS_BEAM*sizeof(float));
+    float* magEcx_y = (float*)malloc(NPIXELS_BEAM*sizeof(float)); 
+    float* phaseEcx_y = (float*)malloc(NPIXELS_BEAM*sizeof(float));
+    i = 0;
+    std::ifstream beamxFile("healpix_detector_x.txt");
+    while(i < NPIXELS_BEAM)
+    {
+        beamxFile \
+            >>   magEco_x[i] \
+            >> phaseEco_x[i] \
+            >>   magEcx_x[i] \
+            >> phaseEcx_x[i];
+        i++;
+    }
+    beamxFile.close();
+    i = 0;
+    std::ifstream beamyFile("healpix_detector_y.txt");
+    while(i < NPIXELS_BEAM)
+    {
+        beamyFile \
+            >>   magEco_y[i] \
+            >> phaseEco_y[i] \
+            >>   magEcx_y[i] \
+            >> phaseEcx_y[i];
+        i++;
+    }
+    beamyFile.close();
+    
     // setup beam
-    PolBeam beam(NSIDE_BEAM, NPIXELS_BEAM);
-    beam.make_unpol_gaussian_elliptical_beams(2.0, 2.0, 0.0);
+    PolBeam beam(NSIDE_BEAM, NPIXELS_BEAM);  
+    beam.beam_from_fields('a', 
+        magEco_x, phaseEco_x,
+        magEco_y, phaseEco_y,
+        magEcx_x, phaseEcx_x,
+        magEcx_y, phaseEcx_y);
+    beam.beam_from_fields('b', 
+        magEco_x, phaseEco_x,
+        magEco_y, phaseEco_y,
+        magEcx_x, phaseEcx_x,
+        magEcx_y, phaseEcx_y);
     beam.build_beams();
-
+    
     // setup pointing
     double *ra;
     double *dec;
@@ -121,7 +169,7 @@ int main( void )
     Scan scan( NSAMPLES, ra, dec, psi);
 
     // convolver object
-    Convolver* cconv = new Convolver(NSAMPLES);
+    Convolver cconv(NSAMPLES);
 
     // setup mapping stuff
     int* scanMask = (int*)malloc(sizeof(int)*NSAMPLES);
@@ -134,17 +182,17 @@ int main( void )
     }
     double* AtA = (double*)malloc(sizeof(double)*9*mapNpixels);
     double* AtD = (double*)malloc(sizeof(double)*3*mapNpixels);
-    int detuids[1] = {0};
-
+    int detuids[1];
+    double det_polangles[1];
     // execute convolution at different position angles
+    detuids[0] = 0;
     double angles[3] = {-M_PI_4, 0.0, M_PI_4};
     for(double polangle: angles)
     {
         init_scan_whole_sky(polangle, ra, dec, psi);
-        //init_point_source_scan(M_PI, 0.0, polangle, 0.2, 0.2, ra, dec, psi);
         start  = std::chrono::high_resolution_clock::now();
-        cconv->exec_convolution(
-            data, nullptr,
+        cconv.exec_convolution(
+            data_a, nullptr,
             'a',
             scan, sky, beam);
         finish = std::chrono::high_resolution_clock::now();
@@ -152,14 +200,13 @@ int main( void )
         std::cerr << "#CPU Convolution took " << elapsed.count() << " sec\n";
 
         // project to map-making matrices
-        double det_polangles[1];
         det_polangles[0] = 0.0;
         libmapping_project_data_to_matrices
         (
             NSAMPLES, 1,
             ra, dec, psi,
             det_polangles,
-            data, scanMask, detuids,
+            data_a, scanMask, detuids,
             NSIDE_SKY, mapNpixels, mapPixels,
             AtA, AtD
         );

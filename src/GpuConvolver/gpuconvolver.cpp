@@ -134,12 +134,12 @@ void GPUConvolver::update_beam(PolBeam beam)
     transposedBeams = (float*)malloc(beamBufferSize);
     for(long i = 0; i < nbpixels; i++)
     {
-        transposedBeams[6*i + 0] = beam.Da_I[i];
-        transposedBeams[6*i + 1] = beam.Da_Qcos[i];
-        transposedBeams[6*i + 2] = beam.Da_Qsin[i];
-        transposedBeams[6*i + 3] = beam.Da_Ucos[i];
-        transposedBeams[6*i + 4] = beam.Da_Usin[i];
-        transposedBeams[6*i + 5] = beam.Da_V[i];
+        transposedBeams[6*i + 0] = beam.aBeams[0][i];
+        transposedBeams[6*i + 1] = beam.aBeams[1][i];
+        transposedBeams[6*i + 2] = beam.aBeams[2][i];
+        transposedBeams[6*i + 3] = beam.aBeams[3][i];
+        transposedBeams[6*i + 4] = beam.aBeams[4][i];
+        transposedBeams[6*i + 5] = beam.aBeams[5][i];
     }
     CUDA_ERROR_CHECK(
         cudaMemcpy(
@@ -153,12 +153,12 @@ void GPUConvolver::update_beam(PolBeam beam)
     transposedBeams = (float*)malloc(beamBufferSize);
     for(long i = 0; i < nbpixels; i++)
     {
-        transposedBeams[6*i + 0] = beam.Db_I[i];
-        transposedBeams[6*i + 1] = beam.Db_Qcos[i];
-        transposedBeams[6*i + 2] = beam.Db_Qsin[i];
-        transposedBeams[6*i + 3] = beam.Db_Ucos[i];
-        transposedBeams[6*i + 4] = beam.Db_Usin[i];
-        transposedBeams[6*i + 5] = beam.Db_V[i];
+        transposedBeams[6*i + 0] = beam.bBeams[0][i];
+        transposedBeams[6*i + 1] = beam.bBeams[1][i];
+        transposedBeams[6*i + 2] = beam.bBeams[2][i];
+        transposedBeams[6*i + 3] = beam.bBeams[3][i];
+        transposedBeams[6*i + 4] = beam.bBeams[4][i];
+        transposedBeams[6*i + 5] = beam.bBeams[5][i];
     }
     CUDA_ERROR_CHECK(
         cudaMemcpy(
@@ -187,32 +187,44 @@ void GPUConvolver::exec_convolution(
 	const double* pa_coords = scan.get_pa_ptr();
     for(long s = 0; s < nsamples; s += chunkSize) 
     {
-        //#pragma omp parallel for default(shared)
         for(int lid = 0; lid < chunkSize; lid++)
         {
-            ptgBuffer[4*lid+0] = ra_coords[s+lid]; 
-            ptgBuffer[4*lid+1] = dec_coords[s+lid]; 
-            ptgBuffer[4*lid+2] = pa_coords[s+lid];
-            
-            /* Locate all sky pixels inside the beam for 
-             * every pointing direction in the Scan. */
-            rangeset<int> intraBeamRanges;
-            pointing sc(M_PI_2 - dec_coords[s+lid], ra_coords[s+lid]);
-            sky.hpxBase.query_disc(sc, rmax, intraBeamRanges);
-            /* Flatten the pixel range list. */
-            int idx = 0;
-            p = lid*cfg.MAX_PIXELS_PER_DISC;
-            for(int r=0; r < intraBeamRanges.nranges(); r++) {
-                int ss = intraBeamRanges.ivbegin(r);
-                int ee = intraBeamRanges.ivend(r);
-                for(int ii = ss; ii < ee; ii++) {
-                    skyPixelsInBeam[p+idx] = ii;
-                    idx++;
-                }
+            if(s + lid > nsamples)
+            { 
+                //std::cout << "sending dummy data" << std::endl;
+                ptgBuffer[4*lid+0] = 0.0;
+                ptgBuffer[4*lid+1] = 0.0;
+                ptgBuffer[4*lid+2] = 0.0;
+                int idx = 0;
+                skyPixelsInBeam[p+idx] = 0;
+                nPixelsInDisc[lid] = 0;
             }
-            nPixelsInDisc[lid] = idx;
+            else
+            {
+                //std::cout << s + lid << " " << nsamples << std::endl;
+                ptgBuffer[4*lid+0] = ra_coords[s+lid]; 
+                ptgBuffer[4*lid+1] = dec_coords[s+lid]; 
+                ptgBuffer[4*lid+2] = pa_coords[s+lid];
+                
+                /* Locate all sky pixels inside the beam for 
+                 * every pointing direction in the Scan. */
+                rangeset<int> intraBeamRanges;
+                pointing sc(M_PI_2 - dec_coords[s+lid], ra_coords[s+lid]);
+                sky.hpxBase.query_disc(sc, rmax, intraBeamRanges);
+                /* Flatten the pixel range list. */
+                int idx = 0;
+                p = lid*cfg.MAX_PIXELS_PER_DISC;
+                for(int r=0; r < intraBeamRanges.nranges(); r++) {
+                    int ss = intraBeamRanges.ivbegin(r);
+                    int ee = intraBeamRanges.ivend(r);
+                    for(int ii = ss; ii < ee; ii++) {
+                        skyPixelsInBeam[p+idx] = ii;
+                        idx++;
+                    }
+                }
+                nPixelsInDisc[lid] = idx;
+            } 
         }
-        
         // send pointing to gpu.
         CUDA_ERROR_CHECK(
             cudaMemcpyAsync(
@@ -240,7 +252,7 @@ void GPUConvolver::exec_convolution(
                 cudaMemcpyHostToDevice)
         );
         
-        // "Multiply" sky times the beam. */
+        // "Multiply" sky times the beam.
         beam_times_sky2(
             cfg,
             chunkSize, 
@@ -268,9 +280,14 @@ void GPUConvolver::exec_convolution(
         for(int lid = 0; lid < chunkSize; lid++)
         {
             if(polFlag == 'a')
-                data_a[s+lid] += result[lid];
-            //if(polFlag == 'b')
-            //    data_b[s+lid] += result[2*lid+1];
+                data_a[s+lid] += result[2*lid+0];
+            if(polFlag == 'b')
+                data_b[s+lid] += result[2*lid+1];
+            if(polFlag == 'p')
+            {
+                data_a[s+lid] += result[2*lid+0];
+                data_b[s+lid] += result[2*lid+1];
+            }
         } 
        //std::cout << s << " " << nsamples << std::endl;
     }

@@ -27,11 +27,10 @@ __global__ void kernel_beamtimessky
     int* intraBeamPixels, 
     int* maxIntraBeamPix,
     
-    float *dataAB
-)
+    float *data)
 {   
-    __shared__  double shA[128];
-    __shared__  double shB[128];
+    __shared__  double shA[64];
+    __shared__  double shB[64];
 
     int ix0;
     int iy0;
@@ -97,19 +96,19 @@ __global__ void kernel_beamtimessky
             I = sky[4*sp + 0];
             Q = sky[4*sp + 1];
             U = sky[4*sp + 2];
-            V = sky[4*sp + 3];
+            //V = sky[4*sp + 3];
             //printf("%E %E %E\n", I, Q, U);
             /* I = I + Qcos + Usin + V .*/
-            shA[threadIdx.x] += 
+            shA[threadIdx.x] +=
                 + I*(baval[0])
-                + Q*(baval[1]*c2chi + baval[2]*s2chi)
-                + U*(baval[3]*c2chi + baval[4]*s2chi)
-                + V*0.0;
+                + Q*(baval[1]*c2chi - baval[2]*s2chi)
+                + U*(baval[3]*c2chi + baval[4]*s2chi);
+                //+ V*0.0;
             shB[threadIdx.x] +=
                 + I*(bbval[0])
-                + Q*(bbval[1]*c2chi + bbval[2]*s2chi)
-                + U*(bbval[3]*c2chi + bbval[4]*s2chi)
-                + V*0.0;;
+                + Q*(-bbval[1]*c2chi + bbval[2]*s2chi)
+                + U*(-bbval[3]*c2chi - bbval[4]*s2chi);
+                //+ V*0.0;
         }
         /* wait for all threads to reduce */
         __syncthreads();
@@ -126,8 +125,8 @@ __global__ void kernel_beamtimessky
         /* Final write to global memory. */
         if(threadIdx.x == 0) 
         {
-            dataAB[iy] = float(shA[0]);
-            //dataAB[2*iy + 1] = float(shB[0]);
+            data[2*iy + 0] = 0.5*float(shA[0]);
+            data[2*iy + 1] = 0.5*float(shB[0]);
         }
         
         __syncthreads();
@@ -151,7 +150,6 @@ void beam_times_sky2(
 	// disc of pixels inside the beam
 	int* intraBeamPixelsGPU, 
     int* maxIntraBeamPixGPU,
-    //cudaStream_t stream,
 	// output
 	float *dataGPU)
 {

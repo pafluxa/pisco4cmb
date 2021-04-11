@@ -1,7 +1,8 @@
 /*
  * polbeam.hpp 
  * 
- * Header file to describe a Polarized Beam as described in Rosset et al. 2010.
+ * Header file implementing a Polarized Beam as described 
+ * in Rosset et al. 2010.
  * 
  */
 
@@ -38,10 +39,8 @@ class PolBeam
         ( 
             char polFlag,
             // Jones vectors
-            float* magEco_x, float* phaseEco_x,
-            float* magEco_y, float* phaseEco_y,
-            float* magEcx_x, float* phaseEcx_x,
-            float* magEcx_y, float* phaseEcx_y
+            float* magEco_x, float* magEco_y, float* phsEco,
+            float* magEcx_x, float* magEcx_y, float* phsEcx
         );
 		
         void build_beams(void);
@@ -57,26 +56,6 @@ class PolBeam
         
         float* aBeams[6];
         float* bBeams[6];
-        
-        float* Da_I;
-        float* Da_Qcos;
-        float* Da_Qsin;
-        float* Da_Ucos;
-        float* Da_Usin;
-        float* Da_V;
-
-        float* Db_I;
-        float* Db_Qcos;
-        float* Db_Qsin;
-        float* Db_Ucos;
-        float* Db_Usin;
-        float* Db_V;
-
-        float omI;
-        float omQ;
-        float omU;
-        float omV;
-
 		int  nside;
         long nPixels;
 

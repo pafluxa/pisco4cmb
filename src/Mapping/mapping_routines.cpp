@@ -31,10 +31,10 @@ libmapping_project_data_to_matrices
 {
     // Create healpixMaps that use the Python buffers
     // Note that all maps share the same mask!
-    //healpixMap *mask;
-    //mask = healpixMap_new();
-    //healpixMap_allocate(map_nside, mask);
-    //healpixMap_set_mask(mask,  pixels_in_the_map, map_size);    
+    healpixMap *mask;
+    mask = healpixMap_new();
+    healpixMap_allocate(map_nside, mask);
+    healpixMap_set_mask(mask,  pixels_in_the_map, map_size);    
     for(int det=0; det < ndets; det++)
     {
         if(dets_to_map[det] == 0)
@@ -48,37 +48,31 @@ libmapping_project_data_to_matrices
                     double _phi, _theta, _psi;
                     _phi   = ra[det * nsamples + sample];
                     _theta = M_PI_2 - dec[det * nsamples + sample];
-                    // Passed arguments are counterclockwise on the sky
-                    // CMB requires clockwise
-                    _psi   = (pol_angle + pa[det * nsamples + sample]);
-                    
+                    // Passed arguments are counterclockwise on the sky CMB requires clockwise
+                    _psi   = -pol_angle + pa[det*nsamples + sample];
                     long pix;
                     ang2pix_ring(map_nside, _theta, _phi, &pix);
 
                     // Transform pixel number to array index using the mask.
                     // Only project if the pixel is actually in the map.
-                    //long idx = healpixMap_pix2idx(mask, pix);
-                    long idx = pix;
+                    long idx = healpixMap_pix2idx(mask, pix);
+                    //long idx = pix;
                     if(idx >= 0)
                     {
                         double d = data[det*nsamples + sample];
-                        
                         double c2psi = cos(2*_psi);
                         double s2psi = sin(2*_psi);
                         // update AtD
                         AtD[idx*3 + 0] += 1.0   * d;
                         AtD[idx*3 + 1] += c2psi * d;
                         AtD[idx*3 + 2] += s2psi * d;
-
                          // update matrix
                         AtA[idx*9 + 0] += 1.0;
                         AtA[idx*9 + 1] += c2psi;
                         AtA[idx*9 + 2] += s2psi;
-                        
                         AtA[idx*9 + 3] += c2psi;
                         AtA[idx*9 + 4] += c2psi*c2psi;
                         AtA[idx*9 + 5] += c2psi*s2psi;
-                        
                         AtA[idx*9 + 6] += s2psi;
                         AtA[idx*9 + 7] += c2psi*s2psi;
                         AtA[idx*9 + 8] += s2psi*s2psi;
@@ -103,41 +97,37 @@ libmapping_get_IQU_from_matrices
     float I[], float Q[], float U[], float W[]
 )
 {
+    double AtA_pix[9];
+    double AtD_pix[3];
     // Setup map mask to translate matrices indexes into map pixels
     // Create healpixMaps that use the Python buffers
     // Note that all maps share the same mask!
-    //healpixMap *mask;
-    //mask = healpixMap_new();
-    //healpixMap_allocate(map_nside, mask);
-    //healpixMap_set_mask(mask,  pixels_in_the_map, map_size);
-    
+    healpixMap *mask;
+    mask = healpixMap_new();
+    healpixMap_allocate(map_nside, mask);
+    healpixMap_set_mask(mask,  pixels_in_the_map, map_size); 
     for(long index = 0; index < map_size; index++)
     {
         // Setup AtA_pix in column major order
-	    double AtA_pix[9];
         AtA_pix[0] = AtA[0 + 9*index];
         AtA_pix[3] = AtA[1 + 9*index];
         AtA_pix[6] = AtA[2 + 9*index];
-
         AtA_pix[1] = AtA[3 + 9*index];
         AtA_pix[4] = AtA[4 + 9*index];
         AtA_pix[7] = AtA[5 + 9*index];
-
         AtA_pix[2] = AtA[6 + 9*index];
         AtA_pix[5] = AtA[7 + 9*index];
         AtA_pix[8] = AtA[8 + 9*index];
-
-        double AtD_pix[3];
         AtD_pix[0] = AtD[0 + 3*index];
         AtD_pix[1] = AtD[1 + 3*index];
         AtD_pix[2] = AtD[2 + 3*index];
         
         int N = 3;
-		int nrhs = 1;
-		int lda = 3;
-		int ipiv[3];
-		int ldb = 3;
-		int info = 0;
+	int nrhs = 1;
+	int lda = 3;
+	int ipiv[3];
+	int ldb = 3;
+	int info = 0;
 		 
         double ii = 0.0;
         double qq = 0.0;
