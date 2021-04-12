@@ -26,8 +26,8 @@
 // this number needs to be a perfect square for the test to work out!
 // this is the number of pixels in an nside=128 healpix map
 #define NSAMPLES_GRID 200
-#define NSAMPLES NSAMPLES_GRID*NSAMPLES_GRID
-//#define NSAMPLES NPIXELS_SKY
+//#define NSAMPLES NSAMPLES_GRID*NSAMPLES_GRID
+#define NSAMPLES NPIXELS_SKY
 
 #define NSIDE_BEAM 1024
 /* how to calculate the number of pixels below
@@ -161,6 +161,7 @@ int main(void)
     beam.beam_from_fields('b', 
         magEco_x, magEco_y, phsEco,
         magEcx_x, magEcx_y, phsEcx);
+    
     //beam.make_unpol_gaussian_elliptical_beams(1.0, 1.0, 0.0);
     beam.build_beams();
     // setup pointing
@@ -204,7 +205,6 @@ int main(void)
     float *data_b;
     data_a = (float*)malloc(sizeof(float)*NSAMPLES);
     data_b = (float*)malloc(sizeof(float)*NSAMPLES);
-    
 	// every PSB scans the sky 3 times at three different angles
 	for(double bcpa: position_angles)
 	{
@@ -212,8 +212,8 @@ int main(void)
 	    std::memset(data_a, 0, sizeof(float)*NSAMPLES);
 	    std::memset(data_b, 0, sizeof(float)*NSAMPLES);
 	    // initialize sky with psi = bcpa + detangle
-	    //init_scan_whole_sky(bcpa, ra, dec, psi);
-	    init_point_source_scan(M_PI, 0.0, bcpa, 0.2, 0.2, ra, dec, psi);
+	    init_scan_whole_sky(bcpa, ra, dec, psi);
+	    //init_point_source_scan(M_PI, 0.0, bcpa, 0.2, 0.2, ra, dec, psi);
 	    start  = std::chrono::high_resolution_clock::now();
 	    // compute convolution for detector A of PSB
 	    cconv.exec_convolution(

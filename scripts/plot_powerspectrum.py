@@ -10,7 +10,7 @@ I2 = I2/(778.241*1e-6)**0.5
 Q2 = Q2/(778.241*1e-6)**0.5
 U2 = U2/(778.241*1e-6)**0.5
 
-cells = numpy.loadtxt('./data/cls/lcdm_cls_r=0.0010.dat')
+cells = numpy.loadtxt('./data/cls/lcdm_cls_r=0.1000.dat')
 TTRef = cells[1]
 EERef = cells[2]
 BBRef = cells[3]
@@ -66,5 +66,5 @@ for idx, ax in enumerate(axes):
     ax.set_xlabel('ell')
     ax.set_ylabel('power')
 
-fig.tight_layout()
+plt.tight_layout()
 plt.show()

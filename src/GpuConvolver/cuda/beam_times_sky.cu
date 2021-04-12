@@ -2,14 +2,13 @@
 
 #include <cuda.h>
 #include <cuda_runtime.h>
-
-#include "cuda/sphtrigo.cuh"
-#include "cuda/healpix_utils.cuh"
 #include "cuda_error_check.h"
 
+#include "cuda/sphtrigo.h"
+#include "cuda/healpix_utils.h"
 #include "cuda/beam_times_sky.h"
 
-using namespace CUDACONV;
+//using namespace CUDACONV;
 
 __global__ void kernel_beamtimessky
 (
@@ -84,9 +83,9 @@ __global__ void kernel_beamtimessky
                 baval[b] = 0.0;
                 bbval[b] = 0.0;
                 for(int j=0; j < 4; j++) {
-                    ww = wgt[j];
                     ni = neighPixels[j];
                     if(ni < bnpixels) {
+                        ww = wgt[j];
                         baval[b] += ww*double(beamsA[6*ni + b]);
                         bbval[b] += ww*double(beamsB[6*ni + b]);
                     }
@@ -134,7 +133,7 @@ __global__ void kernel_beamtimessky
 }
  
 
-void beam_times_sky2( 
+void beam_times_sky( 
     CUDACONV::RunConfig cfg, 
 	// pointing
     int nptg, 

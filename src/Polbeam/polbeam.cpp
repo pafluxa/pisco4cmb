@@ -12,10 +12,13 @@ bool normalize_by_sum(float v[], int N)
     double sum = 0.0;
     for(int i = 0; i < N; i++)
     {
-        sum += double(v[i]);
+        sum += double(v[i]);   
     }
-    if(abs(sum) < 1e-6) 
+    if(abs(sum) < 1e-18)
+    { 
+        std::cerr << "WARNING: norm of vector is very small." << std::endl;
         return false;
+    }
     for(int i = 0; i < N; i++)
     {
         v[i] = v[i]/sum;
@@ -36,7 +39,7 @@ std::complex<double> complex_2ddot(
  */
 {
     std::complex<double> dp;
-    dp = w[0]*std::conj(z[0]) + w[1]*std::conj(z[1]);
+    dp = z[0]*std::conj(w[0]) + z[1]*std::conj(w[1]);
         
     return dp;
 }
@@ -129,95 +132,105 @@ void
 PolBeam::beam_from_fields
 (
     char polFlag,
-    // Jones vectors
-    float* magEco_x, float* magEco_y, float* phaseEco,
-    float* magEcx_x, float* magEcx_y, float* phaseEcx
+    double* magEco, double* phaseEco,
+    double* magEcx, double* phaseEcx
 )
+/*
+ * Computes the beamsor of a single PSB detector a or b using the 
+ * electric field power density (EFPD) of an antenna. This routine
+ * is based on the formalism found in Rosset el at. 2010, with significant
+ * contribution from Michael K. Brewer.
+ * 
+ * The field must be specified as 4 arrays containing the magnitude and
+ * phase of the EFPD along the co and cross polar directions of the 
+ * antenna basis.
+ * 
+ * \param polFlag: set to 'a' ('b') on the particular detector beam of
+ *        the PSB that is being loaded. 
+ * \param magEco: array with co-polar EFPD magnitude.
+ * \param phaseEco: array with the phase of co-polar EFPD.
+ * \param magEcx: array with cross-polar EFPD magnitude along.
+ * \param phaseEcx: array with the phase of cross-polar EFPD.
+ * 
+ */
 {
-    double ii;
-    double qq;
-    double uu;
-    double vv;
-    std::complex<double> E[2];
-    std::complex<double> Eco[2];
-    std::complex<double> Ecx[2];
-
+    float *I;
+    float *Q;
+    float *U;
+    float *V;
+    std::complex<double> Eco;
+    std::complex<double> Ecx;
+    
+    if(polFlag == 'a')
+    {	
+        I = Ia;
+        Q = Qa;
+        U = Ua;
+        V = Va;
+    }
+    if(polFlag == 'b')
+    {	
+        I = Ib;
+        Q = Qb;
+        U = Ub;
+        V = Vb;
+    }
     for(int i = 0; i < nPixels; i++)
     {
-        // build co-polar jones vectors from phase/magnitude
-        Eco[0] = std::polar(magEco_x[i], phaseEco[i]);
-        Eco[1] = std::polar(magEco_y[i], phaseEco[i]);
-        // build cross-polar jones vectors from phase/magnitude
-        Ecx[0] = std::polar(0*magEcx_x[i], phaseEcx[i]);
-        Ecx[1] = std::polar(0*magEcx_y[i], phaseEcx[i]);
-        
-        E[0] = Eco[0] + Ecx[0];
-        E[1] = Eco[1] + Ecx[1];
+        // component along x basis vector
+        Eco = std::polar(magEco[i], phaseEco[i]);
+        // component along y basis vector
+        Ecx = std::polar(magEcx[i], phaseEco[i] + M_PI_2); 
         // compute \tilde{I}
-        ii = complex_2dnorm(E);
-        //std::cout << ii << std::endl;
+        I[i] = std::norm(Eco) + std::norm(Ecx);
         // compute \tilde{Q}
-        qq = complex_2dnorm(Eco) - complex_2dnorm(Ecx);
+        Q[i] = std::norm(Eco) - std::norm(Ecx);
         // compute \tilde{U}
-        uu = 2*std::real(complex_2ddot(Eco, Ecx));
+        U[i] = 2*std::real(Eco*std::conj(Ecx));
         // TODO: add V, possibly equals to this
-        Ecx[0] = -Ecx[0];
-        Ecx[1] = -Ecx[1];
-        vv = -2*std::imag(complex_2ddot(Eco, Ecx));
-    	
-        if(polFlag == 'a')
-	{	
-            Ia[i] = ii;
-            Qa[i] = qq;
-            Ua[i] = uu;
-            Va[i] = vv;
-	}
-	if(polFlag == 'b')
-	{
-            Ib[i] = ii;
-            Qb[i] = qq;
-            Ub[i] = uu;
-            Vb[i] = vv;
-    	}
+        // 2*std::real(-Eco*std::conj(Ecx) - std::conj(Eco)*Ecx)
+        // but it shall stay 0 until I figure it out properly
+        V[i] = 0;
     }
 }
 
 void PolBeam::build_beams(void)
 {
     long i;
-    epsilon = 0.0;
     for(i = 0; i < nPixels; i++)
     {
         aBeams[0][i] = Ia[i] + epsilon*Ib[i];
         
-	aBeams[1][i] = Qa[i] - epsilon*Qb[i];
+        aBeams[1][i] = Qa[i] - epsilon*Qb[i];
         aBeams[2][i] = Ua[i] - epsilon*Ub[i];
-
+        
         aBeams[3][i] = Ua[i] - epsilon*Ub[i];
         aBeams[4][i] = Qa[i] - epsilon*Qb[i];
         
-	aBeams[5][i] = 0;//(Va[i] + epsilon*Vb[i]);
+        aBeams[5][i] = 0;//(Va[i] + epsilon*Vb[i]);
         
-	bBeams[0][i] = Ib[i] + epsilon*Ia[i];
+        bBeams[0][i] = Ib[i] + epsilon*Ia[i];
         
-	bBeams[1][i] = Qb[i] - epsilon*Qa[i];
+        bBeams[1][i] = Qb[i] - epsilon*Qa[i];
         bBeams[2][i] = Ub[i] - epsilon*Ua[i];
         
-	bBeams[3][i] = Ub[i] - epsilon*Ua[i];
+        bBeams[3][i] = Ub[i] - epsilon*Ua[i];
         bBeams[4][i] = Qb[i] - epsilon*Qa[i];
-       
-	bBeams[5][i] = 0;//(Vb[i] + epsilon*Va[i]);            
+        
+        bBeams[5][i] = 0;//(Vb[i] + epsilon*Va[i]);            
     }
     //normalize so integral below beams is 1.0
-    for(int i = 0; i < 5; i++)
+    for(int i = 0; i < 6; i++)
     {   
         if(!normalize_by_sum(aBeams[i], nPixels))
         {
-            std::cerr << "WARNING: A-beam idx " << i << " is zero" << std::endl;
+            std::cerr << "WARNING: A-beam idx " << i << " is zero" 
+                      << std::endl;
         }
         if(!normalize_by_sum(bBeams[i], nPixels))
         {
-            std::cerr << "WARNING: B-beam idx " << i << " is zero" << std::endl;
+            std::cerr << "WARNING: B-beam idx " << i << " is zero" 
+                      << std::endl;
         }
     }
 }
@@ -249,13 +262,11 @@ void PolBeam::make_unpol_gaussian_elliptical_beams(
  */
 {
     // temporal buffers to store fields
-    size_t buffSize = sizeof(float)*nPixels;
-    float* magEco_x = (float*)malloc(buffSize);
-    float* magEco_y = (float*)malloc(buffSize);
-    float* magEcx_x = (float*)malloc(buffSize);
-    float* magEcx_y = (float*)malloc(buffSize);
-    float* phsEco = (float*)malloc(buffSize);
-    float* phsEcx = (float*)malloc(buffSize);
+    size_t buffSize = sizeof(double)*nPixels;
+    double* magEco = (double*)malloc(buffSize);
+    double* magEcx = (double*)malloc(buffSize);
+    double* phsEco = (double*)malloc(buffSize);
+    double* phsEcx = (double*)malloc(buffSize);
     
     // Convert FWHM in degres to sigma, in radians
     double deg2rad = M_PI/180.0;
@@ -289,30 +300,18 @@ void PolBeam::make_unpol_gaussian_elliptical_beams(
                   + c*sin(sig)*sin(sig))*rho*rho);
         if(val < 1e-6)
             val = 0.0;
-        // perfectly polarized beam
-        magEco_x[bpix] = sqrt(val);
-        magEco_y[bpix] = 0.0;
+        // co-polarized beam!
+        magEco[bpix] = sqrt(val);
+        magEcx[bpix] = 0.0;
         phsEco[bpix] = 0.0;
-
-        magEcx_x[bpix] = 0.0;
-        magEcx_y[bpix] = 0.0;
         phsEcx[bpix] = 0.0;
     }
-    
     // build beams from dummy fields
-    this->beam_from_fields(
-        'a',
-        magEco_x, magEco_y, phsEco,
-        magEcx_x, magEcx_y, phsEcx);
-    this->beam_from_fields(
-        'b',
-        magEco_x, magEco_y, phsEco,
-        magEcx_x, magEcx_y, phsEcx);
+    this->beam_from_fields('a', magEco, phsEco, magEcx, phsEcx);
+    this->beam_from_fields('b', magEco, phsEco, magEcx, phsEcx);
     // free temporal storage
-    free(magEco_x);
-    free(magEco_y);
-    free(magEcx_x);
-    free(magEcx_y);
+    free(magEco);
     free(phsEco);
+    free(magEcx);
     free(phsEcx);
 }

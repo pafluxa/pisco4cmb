@@ -49,7 +49,7 @@ libmapping_project_data_to_matrices
                     _phi   = ra[det * nsamples + sample];
                     _theta = M_PI_2 - dec[det * nsamples + sample];
                     // Passed arguments are counterclockwise on the sky CMB requires clockwise
-                    _psi   = -pol_angle + pa[det*nsamples + sample];
+                    _psi   = pol_angle + pa[det*nsamples + sample];
                     long pix;
                     ang2pix_ring(map_nside, _theta, _phi, &pix);
 

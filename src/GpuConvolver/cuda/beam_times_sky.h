@@ -16,7 +16,7 @@ namespace CUDACONV
     typedef struct CUDACONVConf_t RunConfig;
 }
 
-void beam_times_sky2(
+void beam_times_sky(
     CUDACONV::RunConfig cfg, 
     int nptgs,
     double* ptgBuffer,
@@ -26,4 +26,5 @@ void beam_times_sky2(
     int* intraBeamPixels, 
     int* maxIntraBeamPix,
     float *data);
+
 #endif

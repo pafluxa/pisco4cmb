@@ -1,8 +1,4 @@
 /*
- * main.cpp
- *
- * Performs a 24 hour constant elevation scan from the CLASS site.
- * Three different boresight rotations are used (-45 deg, 0 deg, 45 deg)
  *
  */
 #include <cstdlib>
@@ -22,22 +18,25 @@
 // to make use of Healpix_base pointing
 #include <pointing.h>
 
+#define NPSB 1 
+#define NDETS (2*NPSB)
 #define NSIDE_SKY 256
 #define NPIXELS_SKY (12*NSIDE_SKY*NSIDE_SKY)
-// this number needs to be a perfect square for the test to work out!
-// this is the number of pixels in an nside=128 healpix map
-#define NSAMPLES_GRID 128
-#define NSAMPLES NPIXELS_SKY
-//#define NSAMPLES NSAMPLES_GRID*NSAMPLES_GRID
+#define NSAMPLES_GRID 200
+// uncomment for point source scanning
+#define NSAMPLES NSAMPLES_GRID*NSAMPLES_GRID
+// uncomment for whole sky convolution
+//#define NSAMPLES NPIXELS_SKY
 
 #define NSIDE_BEAM 1024
-/*
+/* how to calculate the number of pixels below
  * import healpy
  * import numpy
- * healpy.query_disc(1024, (0,0,1), numpy.radians(5)).size
- * # > 23980
+ * print(healpy.query_disc(1024, (0,0,1), numpy.radians(5)).size)
+ * 23980
 */
 #define NPIXELS_BEAM (23980)
+
 void init_point_source_scan(
     double ra0, double dec0, double pa0,
     double dra, double ddec,
@@ -55,7 +54,6 @@ void init_point_source_scan(
         for(int j=0; j < NSAMPLES_GRID; j++)
         {
             ra_bc = (ra0 - dra) + 2*dra*(double(j)/nra);
-
             ra[i*NSAMPLES_GRID + j] = ra_bc;
             dec[i*NSAMPLES_GRID + j] = dec_bc;
             psi[i*NSAMPLES_GRID + j] = pa0;
@@ -80,7 +78,7 @@ void init_scan_whole_sky(
     }
 }
 
-int main( void )
+int main(void)
 {
     std::ofstream outdata;
     // timing
@@ -88,7 +86,7 @@ int main( void )
     auto finish = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed;
 
-    // setup sky
+    // load sky from disk
     float *skyI, *skyQ, *skyU, *skyV;
     skyI = (float*)malloc(NPIXELS_SKY*sizeof(float));
     skyQ = (float*)malloc(NPIXELS_SKY*sizeof(float));
@@ -99,66 +97,54 @@ int main( void )
     std::ifstream in("maps_input.txt");
     while
     (
-        in >> skyI[i] >> skyQ[i] >> skyU[i] >> skyV[i] && \
-        !in.eof()
-    ) { i++; }
+        in >> skyI[i] >> skyQ[i] >> skyU[i] >> skyV[i] && !in.eof()
+    ) { i++;}
     in.close();
     Sky sky(NSIDE_SKY, skyI, skyQ, skyU, skyV);
 
-    // setup TOD
-    float *data_a;
-    float *data_b;
-    data_a = (float*)malloc(sizeof(float)*NSAMPLES);
-    data_b = (float*)malloc(sizeof(float)*NSAMPLES);
-
+    // setup PSB beams
+    PolBeam beam(NSIDE_BEAM, NPIXELS_BEAM);
     // load beam from disk
-    float* magEco_x = (float*)malloc(NPIXELS_BEAM*sizeof(float));
-    float* phaseEco_x = (float*)malloc(NPIXELS_BEAM*sizeof(float));
-    float* magEcx_x = (float*)malloc(NPIXELS_BEAM*sizeof(float)); 
-    float* phaseEcx_x = (float*)malloc(NPIXELS_BEAM*sizeof(float));
-    float* magEco_y = (float*)malloc(NPIXELS_BEAM*sizeof(float));
-    float* phaseEco_y = (float*)malloc(NPIXELS_BEAM*sizeof(float));
-    float* magEcx_y = (float*)malloc(NPIXELS_BEAM*sizeof(float)); 
-    float* phaseEcx_y = (float*)malloc(NPIXELS_BEAM*sizeof(float));
+    // reserve some memory
+    double* phsEco = (double*)malloc(NPIXELS_BEAM*sizeof(double)); 
+    double* magEco = (double*)malloc(NPIXELS_BEAM*sizeof(double));
+    double* magEcx = (double*)malloc(NPIXELS_BEAM*sizeof(double));
+    double* phsEcx = (double*)malloc(NPIXELS_BEAM*sizeof(double));
+    // load beam from detector A
     i = 0;
-    std::ifstream beamxFile("healpix_detector_x.txt");
-    while(i < NPIXELS_BEAM)
+    std::string line;
+    std::ifstream detAFields("./data/beams/healpix_detector_x.txt");
+    while(std::getline(detAFields, line) && i < NPIXELS_BEAM)
     {
-        beamxFile \
-            >>   magEco_x[i] \
-            >> phaseEco_x[i] \
-            >>   magEcx_x[i] \
-            >> phaseEcx_x[i];
+        std::istringstream iss(line);
+        // stop if an error while parsing ocurrs
+        if(!(iss >> magEco[i] >> phsEco[i] >> magEcx[i] >> phsEcx[i]))
+        { 
+            break; 
+        } 
         i++;
     }
-    beamxFile.close();
+    detAFields.close();
+    // build A beam
+    beam.beam_from_fields('a', magEco, phsEco, magEcx, phsEcx);
+    // load beam from detector B
     i = 0;
-    std::ifstream beamyFile("healpix_detector_y.txt");
-    while(i < NPIXELS_BEAM)
+    std::ifstream detBFields("./data/beams/healpix_detector_y.txt");
+    while(std::getline(detBFields, line) && i < NPIXELS_BEAM)
     {
-        beamyFile \
-            >>   magEco_y[i] \
-            >> phaseEco_y[i] \
-            >>   magEcx_y[i] \
-            >> phaseEcx_y[i];
+        std::istringstream iss(line);
+        // stop if an error while parsing ocurrs
+        if(!(iss >> magEco[i] >> phsEco[i] >> magEcx[i] >> phsEcx[i]))
+        { 
+            break; 
+        } 
         i++;
     }
-    beamyFile.close();
-    
-    // setup beam
-    PolBeam beam(NSIDE_BEAM, NPIXELS_BEAM);  
-    beam.beam_from_fields('a', 
-        magEco_x, phaseEco_x,
-        magEco_y, phaseEco_y,
-        magEcx_x, phaseEcx_x,
-        magEcx_y, phaseEcx_y);
-    beam.beam_from_fields('b', 
-        magEco_x, phaseEco_x,
-        magEco_y, phaseEco_y,
-        magEcx_x, phaseEcx_x,
-        magEcx_y, phaseEcx_y);
+    detBFields.close();
+    // build B beam     
+    beam.beam_from_fields('b', magEco, phsEco, magEcx, phsEcx);
+    //beam.make_unpol_gaussian_elliptical_beams(1.0, 1.0, 0.0);
     beam.build_beams();
-    
     // setup pointing
     double *ra;
     double *dec;
@@ -166,12 +152,11 @@ int main( void )
     ra  = (double*)malloc(sizeof(double)*NSAMPLES);
     dec = (double*)malloc(sizeof(double)*NSAMPLES);
     psi = (double*)malloc(sizeof(double)*NSAMPLES);
-    Scan scan( NSAMPLES, ra, dec, psi);
-
+    Scan scan(NSAMPLES, ra, dec, psi);
     // convolver object
     Convolver cconv(NSAMPLES);
-
-    // setup mapping stuff
+    // mapping stuff, don't mind this
+    int detector_mask[1] = {0};
     int* scanMask = (int*)malloc(sizeof(int)*NSAMPLES);
     std::memset(scanMask, 0, sizeof(int)*NSAMPLES);
     long mapNpixels = NPIXELS_SKY;
@@ -182,48 +167,66 @@ int main( void )
     }
     double* AtA = (double*)malloc(sizeof(double)*9*mapNpixels);
     double* AtD = (double*)malloc(sizeof(double)*3*mapNpixels);
-    int detuids[1];
-    double det_polangles[1];
-    // execute convolution at different position angles
-    detuids[0] = 0;
-    double angles[3] = {-M_PI_4, 0.0, M_PI_4};
-    for(double polangle: angles)
-    {
-        init_scan_whole_sky(polangle, ra, dec, psi);
-        start  = std::chrono::high_resolution_clock::now();
-        cconv.exec_convolution(
-            data_a, nullptr,
-            'a',
-            scan, sky, beam);
-        finish = std::chrono::high_resolution_clock::now();
-        elapsed = finish - start;
-        std::cerr << "#CPU Convolution took " << elapsed.count() << " sec\n";
-
-        // project to map-making matrices
-        det_polangles[0] = 0.0;
+    // execute convolution
+    double detector_angle[1]; 
+    double position_angles[3] = {-M_PI_4, 0.0, M_PI_4};
+    // setup buffer to store time ordered data
+    float *data_a;
+    float *data_b;
+    data_a = (float*)malloc(sizeof(float)*NSAMPLES);
+    data_b = (float*)malloc(sizeof(float)*NSAMPLES);
+	// every PSB scans the sky 3 times at three different angles
+	for(double bcpa: position_angles)
+	{
+	    // zero-out data buffer
+	    std::memset(data_a, 0, sizeof(float)*NSAMPLES);
+	    std::memset(data_b, 0, sizeof(float)*NSAMPLES);
+	    // initialize sky with psi = bcpa + detangle
+        // uncomment below for whole sky convolution
+	    //init_scan_whole_sky(bcpa, ra, dec, psi);
+	    init_point_source_scan(M_PI, 0.0, bcpa, 0.2, 0.2, ra, dec, psi);
+	    start  = std::chrono::high_resolution_clock::now();
+	    // compute convolution for detector A of PSB
+	    cconv.exec_convolution(
+		data_a, data_b,
+		'p',
+		scan, sky, beam);
+	    finish = std::chrono::high_resolution_clock::now();
+	    elapsed = finish - start;
+	    std::cerr << "#GPU Convolution took "
+		      << elapsed.count() << " sec\n";
+	    // project detector data to map-making matrices
+        detector_angle[0] = 0.0;
         libmapping_project_data_to_matrices
-        (
+	    (
             NSAMPLES, 1,
             ra, dec, psi,
-            det_polangles,
-            data_a, scanMask, detuids,
+            detector_angle,
+            data_a, scanMask, detector_mask,
             NSIDE_SKY, mapNpixels, mapPixels,
             AtA, AtD
-        );
-    }
-
+	    );
+        detector_angle[0] = M_PI_2;
+	    libmapping_project_data_to_matrices
+	    (
+            NSAMPLES, 1,
+            ra, dec, psi,
+            detector_angle,
+            data_b, scanMask, detector_mask,
+            NSIDE_SKY, mapNpixels, mapPixels,
+            AtA, AtD
+	    );
+	}
     std::memset(skyI, 0, sizeof(float)*NPIXELS_SKY);
     std::memset(skyQ, 0, sizeof(float)*NPIXELS_SKY);
     std::memset(skyU, 0, sizeof(float)*NPIXELS_SKY);
     std::memset(skyV, 0, sizeof(float)*NPIXELS_SKY);
-
     libmapping_get_IQU_from_matrices
     (
         NSIDE_SKY, mapNpixels,
         AtA, AtD, mapPixels,
         skyI, skyQ, skyU, skyV
     );
-
     // opens the file
     outdata.open("maps_output.txt");
      // file couldn't be opened
@@ -234,20 +237,11 @@ int main( void )
     }
     for(int i=0; i<NPIXELS_SKY; ++i)
     {
-        outdata << skyI[i] << " " << skyQ[i] << " " << skyU[i] << std::endl;
+        outdata << skyI[i] << " " << 
+                   skyQ[i] << " " << 
+                   skyU[i] << std::endl;
     }
     outdata.close();
-
-    //free(ra);
-    //free(dec);
-    //free(psi);
-
-    //free(skyI);
-    //free(skyQ);
-    //free(skyU);
-    //free(skyV);
-
-    //free(data);
 
     return 0;
 }

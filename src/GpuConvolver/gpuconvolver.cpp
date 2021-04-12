@@ -253,7 +253,7 @@ void GPUConvolver::exec_convolution(
         );
         
         // "Multiply" sky times the beam.
-        beam_times_sky2(
+        beam_times_sky(
             cfg,
             chunkSize, 
             ptgBufferGPU,

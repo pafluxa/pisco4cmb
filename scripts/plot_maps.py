@@ -20,32 +20,40 @@ U2 = U2/(4/numpy.pi*347.227)**0.5
 print(numpy.sum(Is)/numpy.sum(I2))
 
 I1m = healpy.gnomview(Is, rot=(180, 0.0, 0.0),
-    reso=2.0, xsize=400, ysize=400,
+    reso=2.0, xsize=300, ysize=300,
     no_plot=True, return_projected_map=True)
 Q1m = healpy.gnomview(Qs, rot=(180, 0.0, 0.0),
-    reso=2.0, xsize=400, ysize=400,
+    reso=2.0, xsize=300, ysize=300,
     no_plot=True, return_projected_map=True)
 U1m = healpy.gnomview(Us, rot=(180, 0.0, 0.0),
-    reso=2.0, xsize=400, ysize=400,
+    reso=2.0, xsize=300, ysize=300,
     no_plot=True, return_projected_map=True)
 
 I2m = healpy.gnomview(I2, rot=(180, 0.0, 0.0),
-    reso=2.0, xsize=400, ysize=400,
+    reso=2.0, xsize=300, ysize=300,
     no_plot=True, return_projected_map=True)
 Q2m = healpy.gnomview(Q2, rot=(180, 0.0, 0.0),
-    reso=2.0, xsize=400, ysize=400,
+    reso=2.0, xsize=300, ysize=300,
     no_plot=True, return_projected_map=True)
 U2m = healpy.gnomview(U2, rot=(180, 0.0, 0.0),
-    reso=2.0, xsize=400, ysize=400,
+    reso=2.0, xsize=300, ysize=300,
     no_plot=True, return_projected_map=True)
 
-fix, axes = plt.subplots(2, 3, figsize=(12, 5))
+fig, axes = plt.subplots(2, 3, figsize=(12, 5))
 axes[0][0].imshow(I1m)
+axes[0][0].set_title("In. Stokes I (smooth)")
 axes[0][1].imshow(Q1m)
+axes[0][1].set_title("In. Stokes Q (smooth)")
 axes[0][2].imshow(U1m)
+axes[0][2].set_title("In. Stokes U (smooth)")
 
 axes[1][0].imshow(I2m)
+axes[1][0].set_title("Out Stokes I (PISCO)")
 axes[1][1].imshow(Q2m)
+axes[1][1].set_title("Out Stokes Q (PISCO)")
 axes[1][2].imshow(U2m)
+axes[1][2].set_title("Out Stokes U (PISCO)")
+
+fig.tight_layout()
 
 plt.show()

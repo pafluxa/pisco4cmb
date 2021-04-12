@@ -39,8 +39,8 @@ class PolBeam
         ( 
             char polFlag,
             // Jones vectors
-            float* magEco_x, float* magEco_y, float* phsEco,
-            float* magEcx_x, float* magEcx_y, float* phsEcx
+            double* magEco, double* phsEco, 
+            double* magEcx, double* phsEcx
         );
 		
         void build_beams(void);
