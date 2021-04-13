@@ -20,23 +20,23 @@ U2 = U2/(4/numpy.pi*347.227)**0.5
 print(numpy.sum(Is)/numpy.sum(I2))
 
 I1m = healpy.gnomview(Is, rot=(180, 0.0, 0.0),
-    reso=2.0, xsize=300, ysize=300,
+    reso=2.0, xsize=200, ysize=200,
     no_plot=True, return_projected_map=True)
 Q1m = healpy.gnomview(Qs, rot=(180, 0.0, 0.0),
-    reso=2.0, xsize=300, ysize=300,
+    reso=2.0, xsize=200, ysize=200,
     no_plot=True, return_projected_map=True)
 U1m = healpy.gnomview(Us, rot=(180, 0.0, 0.0),
-    reso=2.0, xsize=300, ysize=300,
+    reso=2.0, xsize=200, ysize=200,
     no_plot=True, return_projected_map=True)
 
 I2m = healpy.gnomview(I2, rot=(180, 0.0, 0.0),
-    reso=2.0, xsize=300, ysize=300,
+    reso=2.0, xsize=200, ysize=200,
     no_plot=True, return_projected_map=True)
 Q2m = healpy.gnomview(Q2, rot=(180, 0.0, 0.0),
-    reso=2.0, xsize=300, ysize=300,
+    reso=2.0, xsize=200, ysize=200,
     no_plot=True, return_projected_map=True)
 U2m = healpy.gnomview(U2, rot=(180, 0.0, 0.0),
-    reso=2.0, xsize=300, ysize=300,
+    reso=2.0, xsize=200, ysize=200,
     no_plot=True, return_projected_map=True)
 
 fig, axes = plt.subplots(2, 3, figsize=(12, 5))

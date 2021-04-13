@@ -22,7 +22,7 @@
 #define NDETS (2*NPSB)
 #define NSIDE_SKY 256
 #define NPIXELS_SKY (12*NSIDE_SKY*NSIDE_SKY)
-#define NSAMPLES_GRID 200
+#define NSAMPLES_GRID 256
 // uncomment for point source scanning
 #define NSAMPLES NSAMPLES_GRID*NSAMPLES_GRID
 // uncomment for whole sky convolution
@@ -113,7 +113,7 @@ int main(void)
     // load beam from detector A
     i = 0;
     std::string line;
-    std::ifstream detAFields("./data/beams/healpix_detector_x.txt");
+    std::ifstream detAFields("data/beams/nocx_healpix_detector_y.txt");
     while(std::getline(detAFields, line) && i < NPIXELS_BEAM)
     {
         std::istringstream iss(line);
@@ -129,7 +129,7 @@ int main(void)
     beam.beam_from_fields('a', magEco, phsEco, magEcx, phsEcx);
     // load beam from detector B
     i = 0;
-    std::ifstream detBFields("./data/beams/healpix_detector_y.txt");
+    std::ifstream detBFields("data/beams/nocx_healpix_detector_x.txt");
     while(std::getline(detBFields, line) && i < NPIXELS_BEAM)
     {
         std::istringstream iss(line);
@@ -167,6 +167,8 @@ int main(void)
     }
     double* AtA = (double*)malloc(sizeof(double)*9*mapNpixels);
     double* AtD = (double*)malloc(sizeof(double)*3*mapNpixels);
+    std::memset(AtA, 0, sizeof(double)*9*mapNpixels);
+    std::memset(AtD, 0, sizeof(double)*3*mapNpixels);
     // execute convolution
     double detector_angle[1]; 
     double position_angles[3] = {-M_PI_4, 0.0, M_PI_4};
@@ -196,6 +198,7 @@ int main(void)
 	    std::cerr << "#GPU Convolution took "
 		      << elapsed.count() << " sec\n";
 	    // project detector data to map-making matrices
+        
         detector_angle[0] = 0.0;
         libmapping_project_data_to_matrices
 	    (
@@ -206,7 +209,8 @@ int main(void)
             NSIDE_SKY, mapNpixels, mapPixels,
             AtA, AtD
 	    );
-        detector_angle[0] = M_PI_2;
+        /*
+        detector_angle[0] =0.0;
 	    libmapping_project_data_to_matrices
 	    (
             NSAMPLES, 1,
@@ -216,6 +220,7 @@ int main(void)
             NSIDE_SKY, mapNpixels, mapPixels,
             AtA, AtD
 	    );
+        */
 	}
     std::memset(skyI, 0, sizeof(float)*NPIXELS_SKY);
     std::memset(skyQ, 0, sizeof(float)*NPIXELS_SKY);

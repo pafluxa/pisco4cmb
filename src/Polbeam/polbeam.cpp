@@ -180,7 +180,7 @@ PolBeam::beam_from_fields
         // component along x basis vector
         Eco = std::polar(magEco[i], phaseEco[i]);
         // component along y basis vector
-        Ecx = std::polar(magEcx[i], phaseEco[i] + M_PI_2); 
+        Ecx = std::polar(magEcx[i], phaseEcx[i]); 
         // compute \tilde{I}
         I[i] = std::norm(Eco) + std::norm(Ecx);
         // compute \tilde{Q}

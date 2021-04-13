@@ -76,5 +76,5 @@ bpth = os.path.dirname(datapath)
 fnm = os.path.basename(datapath)
 newfnm = 'healpix_' + fnm
 finalpth = os.path.join(bpth, newfnm)
-beamData = numpy.vstack([magco, phsco, magcx, phscx]).swapaxes(0,1)
+beamData = numpy.vstack([magco, phsco, 0*magcx, 0*phscx]).swapaxes(0,1)
 numpy.savetxt(finalpth, beamData)
