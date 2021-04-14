@@ -7,6 +7,15 @@
 // to make use of Healpix_base pointing
 #include <pointing.h>
 
+#ifndef POLBEAM_DUMPBEAMS 
+#define POLBEAM_DUMPBEAMS true
+#endif
+
+#if POLBEAM_DUMPBEAMS
+#include <fstream>
+#endif
+
+
 bool normalize_by_sum(float v[], int N)
 {
     double sum = 0.0;
@@ -70,7 +79,7 @@ PolBeam::PolBeam(int nside, long nPixels) :
 
 PolBeam::~PolBeam()
 {
-    //free_buffers();
+    free_buffers();
 }
 
 void PolBeam::alloc_buffers()
@@ -160,6 +169,14 @@ PolBeam::beam_from_fields
     float *V;
     std::complex<double> Eco;
     std::complex<double> Ecx;
+
+    #if POLBEAM_DUMPBEAMS
+    std::string pf(1, polFlag);
+    std::string dumpfilepath = "dump_detector_" + pf + ".txt";
+    std::ofstream dumpfile(dumpfilepath);    
+    std::cerr << "INFO: DUMPING I, Q, U and V beams to " 
+              << dumpfilepath << std::endl;
+    #endif
     
     if(polFlag == 'a')
     {	
@@ -191,6 +208,12 @@ PolBeam::beam_from_fields
         // 2*std::real(-Eco*std::conj(Ecx) - std::conj(Eco)*Ecx)
         // but it shall stay 0 until I figure it out properly
         V[i] = 0;
+        #if POLBEAM_DUMPBEAMS
+        dumpfile << I[i] << " " 
+                 << Q[i] << " " 
+                 << U[i] << " " 
+                 << V[i] << std::endl;
+        #endif
     }
 }
 
@@ -220,6 +243,10 @@ void PolBeam::build_beams(void)
         bBeams[5][i] = 0;//(Vb[i] + epsilon*Va[i]);            
     }
     //normalize so integral below beams is 1.0
+    //edit: normalization should be made as a post-processing step,
+    //      just like a real experiment performs calibration of the
+    //      the timestreams after they are acquired.
+    /*
     for(int i = 0; i < 6; i++)
     {   
         if(!normalize_by_sum(aBeams[i], nPixels))
@@ -233,6 +260,7 @@ void PolBeam::build_beams(void)
                       << std::endl;
         }
     }
+    */
 }
 
 void PolBeam::make_unpol_gaussian_elliptical_beams(
