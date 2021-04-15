@@ -2,15 +2,15 @@
 #include <cstdlib>
 
 Sky::Sky( 
-	unsigned int nside, 
-	float* I, 
-	float* Q, 
-	float* U, 
-	float* V ) : _nside{ nside } 
+	int _nside, 
+	const float* I,  
+	const float* Q, 
+    const float* U, 
+	const float* V)
 {
-	hpxBase.SetNside( nside, RING );
-	
-	_nPixels = 12*nside*nside;
+    nside = _nside;
+    nPixels = 12*nside*nside;
+	hpxBase.SetNside(nside, RING);
 	
 	sI = I;
 	sQ = Q;

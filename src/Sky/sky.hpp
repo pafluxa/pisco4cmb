@@ -12,18 +12,16 @@
 class Sky
 {
     public:
-        
         Sky( 
-			unsigned int nside, 
-			float* I, 
-			float* Q, 
-			float* U,
-			float* V );
-        
+            int nside, 
+			const float* I, 
+			const float* Q, 
+			const float* U,
+			const float* V);
        ~Sky(){};
         
-        int get_nside ( void ) const { return _nside; };
-        unsigned long size ( void ) const {return _nPixels; };
+        int get_nside (void) const { return nside; };
+        unsigned long size (void) const { return nPixels; };
 
 		Healpix_Base hpxBase;
 		
@@ -32,10 +30,11 @@ class Sky
 		const float* sQ;
 		const float* sU;
 		const float* sV;
+        
     private:
 		
-		unsigned int  _nside;
-        unsigned long _nPixels;
+		unsigned int  nside;
+        unsigned long nPixels;
 };
 
 #endif // end include guard
