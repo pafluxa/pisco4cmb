@@ -11,32 +11,32 @@
 #include "Scan/scan.hpp"
 #include "Bpoint/BPoint.h"
 #include "Polbeam/polbeam.hpp"
-#include "GpuConvolver/gpuconvolver.hpp"
-#include "GpuConvolver/cuda/beam_times_sky.h"
+#include "Convolver/convolver.hpp"
 #include "Mapping/mapping_routines.h"
 
 #include <healpix_base.h>
 // to make use of Healpix_base pointing
 #include <pointing.h>
 
+#define DUMP_POL_BEAMS true
 #define NPSB 1 
 #define NDETS (2*NPSB)
-#define NSIDE_SKY 256
+#define NSIDE_SKY 512
 #define NPIXELS_SKY (12*NSIDE_SKY*NSIDE_SKY)
-// this number needs to be a perfect square for the test to work out!
-// this is the number of pixels in an nside=128 healpix map
-#define NSAMPLES_GRID 200
-//#define NSAMPLES NSAMPLES_GRID*NSAMPLES_GRID
-#define NSAMPLES NPIXELS_SKY
+#define NSAMPLES_GRID 512
+// uncomment for point source scanning
+#define NSAMPLES NSAMPLES_GRID*NSAMPLES_GRID
+// uncomment for whole sky convolution
+//#define NSAMPLES NPIXELS_SKY
 
-#define NSIDE_BEAM 1024
+#define NSIDE_BEAM 2048
 /* how to calculate the number of pixels below
- * import healpy
- * import numpy
- * print(healpy.query_disc(1024, (0,0,1), numpy.radians(5)).size)
- * 23980
+import healpy
+import numpy
+print(healpy.query_disc(2048, (0,0,1), numpy.radians(5)).size)
+#95484
 */
-#define NPIXELS_BEAM (23980)
+#define NPIXELS_BEAM (95484)
 
 void init_point_source_scan(
     double ra0, double dec0, double pa0,
@@ -106,63 +106,44 @@ int main(void)
     // setup PSB beams
     PolBeam beam(NSIDE_BEAM, NPIXELS_BEAM);
     // load beam from disk
-    // reserver some memory
-    float* phsEco = (float*)malloc(NPIXELS_BEAM*sizeof(float)); 
-    float* magEco_x = (float*)malloc(NPIXELS_BEAM*sizeof(float));
-    float* magEco_y = (float*)malloc(NPIXELS_BEAM*sizeof(float)); 
-    float* phsEcx = (float*)malloc(NPIXELS_BEAM*sizeof(float)); 
-    float* magEcx_x = (float*)malloc(NPIXELS_BEAM*sizeof(float));
-    float* magEcx_y = (float*)malloc(NPIXELS_BEAM*sizeof(float));
-    // set to zero, so we only read the data actually need
-    std::memset(magEco_x, 0, NPIXELS_BEAM*sizeof(float));
-    std::memset(magEco_y, 0, NPIXELS_BEAM*sizeof(float));
-    std::memset(phsEco, 0, NPIXELS_BEAM*sizeof(float));
-    std::memset(magEcx_x, 0, NPIXELS_BEAM*sizeof(float));
-    std::memset(magEcx_y, 0, NPIXELS_BEAM*sizeof(float));
-    std::memset(phsEcx, 0, NPIXELS_BEAM*sizeof(float));
-    // load beam from detector A
     i = 0;
     std::string line;
-    std::ifstream beamAFile("./data/beams/healpix_detector_x.txt");
-    while(std::getline(beamAFile, line) && i < NPIXELS_BEAM)
+    std::ifstream detAFields("data/beams/hpx_tilde_beams_detector_x.txt");
+    while(std::getline(detAFields, line) && i < NPIXELS_BEAM)
     {
         std::istringstream iss(line);
-        if(!
-            (iss \
-            >> magEco_x[i] >> magEco_y[i] >> phsEco[i] 
-            >> magEcx_x[i] >> magEcx_y[i] >> phsEcx[i]))
-	{ 
-	    break; 
-	} // error
+        // stop if an error while parsing ocurrs
+        if(!(iss 
+             >> beam.Ia[i] 
+             >> beam.Qa[i] 
+             >> beam.Ua[i] 
+             >> beam.Va[i]))
+        { 
+            break; 
+        } 
         i++;
     }
-    beamAFile.close();
-    // build A beam
-    beam.beam_from_fields('a', 
-        magEco_x, magEco_y, phsEco,
-        magEcx_x, magEcx_y, phsEcx);
-    // load beam from detector B
+    detAFields.close();
+    // load and buld beam for detector B
     i = 0;
-    std::ifstream beamBFile("./data/beams/healpix_detector_x.txt");
-    while(std::getline(beamBFile, line) && i < NPIXELS_BEAM)
+    //std::cout << "running with no cross-polarization!" << std::endl;
+    std::ifstream detBFields("data/beams/hpx_tilde_beams_detector_x.txt");
+    while(std::getline(detBFields, line) && i < NPIXELS_BEAM)
     {
         std::istringstream iss(line);
-        if(!
-            (iss \
-            >> magEco_x[i] >> magEco_y[i] >> phsEco[i] 
-            >> magEcx_x[i] >> magEcx_y[i] >> phsEcx[i]))
-	{ 
-	    break; 
-	} // error
+        // stop if an error while parsing ocurrs
+        if(!(iss 
+             >> beam.Ib[i] 
+             >> beam.Qb[i] 
+             >> beam.Ub[i] 
+             >> beam.Vb[i]))
+        { 
+            break; 
+        } 
         i++;
     }
-    beamBFile.close();
-    // build B beam
-    beam.beam_from_fields('b', 
-        magEco_x, magEco_y, phsEco,
-        magEcx_x, magEcx_y, phsEcx);
-    
-    //beam.make_unpol_gaussian_elliptical_beams(1.0, 1.0, 0.0);
+    detBFields.close();
+    // execute build of polarized beams
     beam.build_beams();
     // setup pointing
     double *ra;
@@ -183,7 +164,8 @@ int main(void)
     cfg.MAX_PIXELS_PER_DISC = MAXDISCSIZE;
     cconv.update_beam(beam);
     cconv.update_sky(cfg, sky);
-    // setup mapping stuff
+    // mapping stuff, don't mind this
+    int detector_mask[1] = {0};
     int* scanMask = (int*)malloc(sizeof(int)*NSAMPLES);
     std::memset(scanMask, 0, sizeof(int)*NSAMPLES);
     long mapNpixels = NPIXELS_SKY;
@@ -194,10 +176,9 @@ int main(void)
     }
     double* AtA = (double*)malloc(sizeof(double)*9*mapNpixels);
     double* AtD = (double*)malloc(sizeof(double)*3*mapNpixels);
-    
+    std::memset(AtA, 0, sizeof(double)*9*mapNpixels);
+    std::memset(AtD, 0, sizeof(double)*3*mapNpixels);
     // execute convolution
-    // this is just an example so we project one detector at a time
-    int detector_mask[1] = {0};
     double detector_angle[1]; 
     double position_angles[3] = {-M_PI_4, 0.0, M_PI_4};
     // setup buffer to store time ordered data
@@ -212,12 +193,13 @@ int main(void)
 	    std::memset(data_a, 0, sizeof(float)*NSAMPLES);
 	    std::memset(data_b, 0, sizeof(float)*NSAMPLES);
 	    // initialize sky with psi = bcpa + detangle
-	    init_scan_whole_sky(bcpa, ra, dec, psi);
-	    //init_point_source_scan(M_PI, 0.0, bcpa, 0.2, 0.2, ra, dec, psi);
+        // uncomment below for whole sky convolution
+	    //init_scan_whole_sky(bcpa, ra, dec, psi);
+	    // uncomment for point source scanning
+        init_point_source_scan(M_PI, 0.0, bcpa, 0.2, 0.2, ra, dec, psi);
 	    start  = std::chrono::high_resolution_clock::now();
 	    // compute convolution for detector A of PSB
 	    cconv.exec_convolution(
-		cfg,
 		data_a, data_b,
 		'p',
 		scan, sky, beam);
@@ -226,26 +208,28 @@ int main(void)
 	    std::cerr << "#GPU Convolution took "
 		      << elapsed.count() << " sec\n";
 	    // project detector data to map-making matrices
-	    detector_angle[0] = 0.0;
+        detector_angle[0] = 0.0;
+        libmapping_project_data_to_matrices
+	    (
+            NSAMPLES, 1,
+            ra, dec, psi,
+            detector_angle,
+            data_a, scanMask, detector_mask,
+            NSIDE_SKY, mapNpixels, mapPixels,
+            AtA, AtD
+	    );
+        
+        detector_angle[0] = M_PI_2;
 	    libmapping_project_data_to_matrices
 	    (
-		NSAMPLES, 1,
-		ra, dec, psi,
-		detector_angle,
-		data_a, scanMask, detector_mask,
-		NSIDE_SKY, mapNpixels, mapPixels,
-		AtA, AtD
+            NSAMPLES, 1,
+            ra, dec, psi,
+            detector_angle,
+            data_b, scanMask, detector_mask,
+            NSIDE_SKY, mapNpixels, mapPixels,
+            AtA, AtD
 	    );
-	    detector_angle[0] = M_PI_2;
-	    libmapping_project_data_to_matrices
-	    (
-		NSAMPLES, 1,
-		ra, dec, psi,
-		detector_angle,
-		data_b, scanMask, detector_mask,
-		NSIDE_SKY, mapNpixels, mapPixels,
-		AtA, AtD
-	    );
+        
 	}
     std::memset(skyI, 0, sizeof(float)*NPIXELS_SKY);
     std::memset(skyQ, 0, sizeof(float)*NPIXELS_SKY);
@@ -265,7 +249,7 @@ int main(void)
         std::cerr << "Error: file could not be opened" << std::endl;
         exit(1);
     }
-    for(int i=0; i<NPIXELS_SKY; ++i)
+    for(int i=0; i<NPIXELS_SKY; i++)
     {
         outdata << skyI[i] << " " << 
                    skyQ[i] << " " << 

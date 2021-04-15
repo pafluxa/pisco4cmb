@@ -11,13 +11,13 @@ I2, Q2, U2 = numpy.loadtxt(map2, unpack=True)
 
 # normalize
 Is, Qs, Us = healpy.smoothing(
-    (I1, Q1, U1), fwhm=numpy.deg2rad(1.0), pol=True)
-
-I2 = I2/(4/numpy.pi*347.227)**0.5
-Q2 = Q2/(4/numpy.pi*347.227)**0.5
-U2 = U2/(4/numpy.pi*347.227)**0.5
-
-print(numpy.sum(Is)/numpy.sum(I2))
+    (I1, Q1, U1), fwhm=numpy.deg2rad(1.1), pol=True)
+ns = numpy.sum(Is)
+np = numpy.sum(I2)
+r = ns/np
+I2 = I2*r
+Q2 = Q2*r
+U2 = U2*r
 
 I1m = healpy.gnomview(Is, rot=(180, 0.0, 0.0),
     reso=2.0, xsize=200, ysize=200,

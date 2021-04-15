@@ -5,7 +5,7 @@ set(CMAKE_DISABLE_IN_SOURCE_BUILD ON)
 set(CMAKE_DISABLE_SOURCE_CHANGES ON)
 
 project(pixconv
-        LANGUAGES CXX
+        LANGUAGES CXX CUDA
         VERSION 0.1
         DESCRIPTION "Pixel space convolution on the sphere.")
 
@@ -30,10 +30,10 @@ SET(CMAKE_CXX_FLAGS
   "${CMAKE_CXX_FLAGS} -march=native -fopenmp -pthread -O3")
  
 # options to compile the cuda code separately
-#set(CUDA_SEPARABLE_COMPILATION ON)
-#set(CUDA_PROPAGATE_HOST_FLAGS OFF)
-#set(CUDA_HOST_COMPILER g++)
-#set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --default-stream per-thread" )
+set(CUDA_SEPARABLE_COMPILATION ON)
+set(CUDA_PROPAGATE_HOST_FLAGS OFF)
+set(CUDA_HOST_COMPILER g++)
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --default-stream per-thread" )
 
 # executable
 #cuda_add_executable(wholesky_convolution_gpu.exe
@@ -126,7 +126,7 @@ target_link_libraries(wholesky_convolution_cpu.exe
     ${HEALPIX_LIBRARIES}
     ${CHEALPIX_LIBRARIES}
     ${CFITSIO_LIBRARIES}
-    -lopenblas
+    ${LAPACK_LIBRARIES}
 )
 
 

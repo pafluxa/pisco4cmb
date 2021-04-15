@@ -60,12 +60,7 @@ class PolBeam
         long nPixels;
 
         Healpix_Base hpxBase;    
-        
-    private:
 
-		double rhoMax;
-        double epsilon;
-        
 		float* Ia;
 		float* Qa;
 		float* Ua;
@@ -76,6 +71,11 @@ class PolBeam
 		float* Ub;
 		float* Vb;
     
+    private:
+
+		double rhoMax;
+        double epsilon;
+        
         void alloc_buffers( void );
         void free_buffers(void);
 };

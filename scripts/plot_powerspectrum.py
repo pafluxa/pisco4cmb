@@ -6,9 +6,9 @@ I1, Q1, U1, V1 = numpy.loadtxt('maps_input.txt', unpack=True)
 
 I2, Q2, U2 = numpy.loadtxt('maps_output.txt', unpack=True)
 # manual normalization by beam solid angle
-I2 = I2/(778.241*1e-6)**0.5
-Q2 = Q2/(778.241*1e-6)**0.5
-U2 = U2/(778.241*1e-6)**0.5
+I2 = 0.5*I2/(778.241*1e-6)**0.5
+Q2 = 0.5*Q2/(778.241*1e-6)**0.5
+U2 = 0.5*U2/(778.241*1e-6)**0.5
 
 cells = numpy.loadtxt('./data/cls/lcdm_cls_r=0.1000.dat')
 TTRef = cells[1]
@@ -16,7 +16,7 @@ EERef = cells[2]
 BBRef = cells[3]
 BBlmax = len(BBRef)
 
-Is, Qs, Us = healpy.smoothing((I1, Q1, U1), fwhm=numpy.deg2rad(1.0), pol=True)
+Is, Qs, Us = healpy.smoothing((I1, Q1, U1), fwhm=numpy.deg2rad(1.1), pol=True)
 
 print(numpy.sum(I2)/numpy.sum(Is))
 print(numpy.sum(Q2)/numpy.sum(Qs))
