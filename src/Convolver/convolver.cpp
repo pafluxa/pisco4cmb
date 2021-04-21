@@ -51,7 +51,9 @@ void Convolver::exec_convolution(
 	const double* pa_coords  = scan.get_pa_ptr();
 
     // begin parallel region
-    #pragma omp parallel for
+    #ifdef CONVOLVER_OPENMPENABLED
+        #pragma omp parallel for
+    #endif
     for(long i = 0; i < nsamples; i++) 
     {
         // declare these internally because they only
@@ -60,7 +62,9 @@ void Convolver::exec_convolution(
         float db = 0.0;
         double ra_bc   = ra_coords[i]; 
         double dec_bc = dec_coords[i]; 
-        double pa_bc   = pa_coords[i];
+        // Passed arguments are counterclockwise on the sky 
+        // CMB requires clockwise
+        double pa_bc = -pa_coords[i];
         
         beam_times_sky(
             sky, beam, 
