@@ -11,10 +11,10 @@
 Convolver::Convolver(unsigned long _nsamples)
 {
     // get active number of threads
-    nthreads = omp_get_num_threads();	
-    nsamples = _nsamples;	
+    nthreads = omp_get_num_threads();
+    nsamples = _nsamples;
     int chunkSize = nsamples/nthreads;
-    int it = 0;	
+    int it = 0;
     int s = 0;
     int e = chunkSize;
     while(it < nthreads - 1)
@@ -22,57 +22,57 @@ Convolver::Convolver(unsigned long _nsamples)
         bufferStart.push_back(s);
         bufferEnd.push_back(e);
         s += chunkSize;
-        e += chunkSize;        
+        e += chunkSize;
         it += 1;
-	}
+    }
     chunkSize = nsamples - nthreads*chunkSize;
     s += chunkSize;
     e += chunkSize;
     bufferStart.push_back(s);
-    bufferEnd.push_back(e);    
+    bufferEnd.push_back(e);
 }
 
 Convolver::~Convolver()
-{    
+{
     bufferStart.clear();
     bufferEnd.clear();
 }
 
 void Convolver::exec_convolution(
-	double* data_a, double* data_b, 
+    double* data_a, double* data_b,
     char polFlag,
-	Scan& scan, 
-	Sky& sky,
-	PolBeam& beam) 
+    Scan& scan,
+    Sky& sky,
+    PolBeam& beam)
 {
     // convenience pointers
-	const double* ra_coords = scan.get_ra_ptr();
-	const double* dec_coords = scan.get_dec_ptr();
-	const double* pa_coords  = scan.get_pa_ptr();
+    const double* ra_coords = scan.get_ra_ptr();
+    const double* dec_coords = scan.get_dec_ptr();
+    const double* pa_coords  = scan.get_pa_ptr();
 
     // begin parallel region
     #ifdef CONVOLVER_OPENMPENABLED
         #pragma omp parallel for
     #endif
-    for(long i = 0; i < nsamples; i++) 
+    for(long i = 0; i < nsamples; i++)
     {
         // declare these internally because they only
         // live inside the parallel region
         double da = 0.0;
         double db = 0.0;
-        double ra_bc   = ra_coords[i]; 
-        double dec_bc = dec_coords[i]; 
-        // Passed arguments are counterclockwise on the sky 
+        double ra_bc   = ra_coords[i];
+        double dec_bc = dec_coords[i];
+        // Passed arguments are counterclockwise on the sky
         // CMB requires clockwise
         double pa_bc = -pa_coords[i];
-        
+
         beam_times_sky(
-            sky, beam, 
-            ra_bc, dec_bc, pa_bc, 
+            sky, beam,
+            ra_bc, dec_bc, pa_bc,
             &da, &db);
-        
+
         if(polFlag == 'a')
-        {   
+        {
             data_a[i] = da;
         }
         else if (polFlag == 'b')
@@ -89,66 +89,66 @@ void Convolver::exec_convolution(
             throw std::invalid_argument(\
                 "valid polFlags are 'a', 'b' and 'p'" );
         }
-    }    
+    }
 }
 
-void Convolver::beam_times_sky( 
-	Sky& sky, 
-    PolBeam& beam, 
-	float ra_bc, 
+void Convolver::beam_times_sky(
+    Sky& sky,
+    PolBeam& beam,
+    float ra_bc,
     float dec_bc, \
     float pa_bc,
     double* da, double* db)
 {
-	double ww;
+    double ww;
     double rmax;
- 	double data_a;
- 	double data_b;
-    
-	double ra_pix, dec_pix;
+    double data_a;
+    double data_b;
+
+    double ra_pix, dec_pix;
     double rho, sigma, chi, c2chi, s2chi;
-    
-    double beam_a[3]; 
+
+    double beam_a[3];
     double beam_b[3];
 
     long i, ni, skyPix;
     int range_begin, range_end, rn;
-    
-	fix_arr< int,    4 > neigh;
-	fix_arr< double, 4 >   wgh;
-	rangeset<int> intraBeamRanges;
+
+    fix_arr< int,    4 > neigh;
+    fix_arr< double, 4 >   wgh;
+    rangeset<int> intraBeamRanges;
 
     #ifdef CONVOLVER_CHIASPABC
     std::cerr < "using chi = pa_bc!" << std::endl;
     #endif
 
-    // find sky pixels around beam center, up to beam.rhoMax	
-	rmax = beam.get_rho_max();
-	pointing sc(M_PI_2 - dec_bc, ra_bc);
-	sky.hpxBase.query_disc(sc, rmax, intraBeamRanges);
-		
-	// sky times beam multiplication loop
-	data_a = 0.0;
-	data_b = 0.0;
+    // find sky pixels around beam center, up to beam.rhoMax
+    rmax = beam.get_rho_max();
+    pointing sc(M_PI_2 - dec_bc, ra_bc);
+    sky.hpxBase.query_disc(sc, rmax, intraBeamRanges);
+
+    // sky times beam multiplication loop
+    data_a = 0.0;
+    data_b = 0.0;
     // for every sky pixel in the beam
-	for( rn=0; rn < intraBeamRanges.nranges(); rn++ )
-	{
-		range_begin = intraBeamRanges.ivbegin( rn );
-		range_end   = intraBeamRanges.ivend  ( rn );
-		for( skyPix=range_begin; skyPix < range_end; skyPix++ )
-		{	
+    for( rn=0; rn < intraBeamRanges.nranges(); rn++ )
+    {
+        range_begin = intraBeamRanges.ivbegin( rn );
+        range_end   = intraBeamRanges.ivend  ( rn );
+        for( skyPix=range_begin; skyPix < range_end; skyPix++ )
+        {
             // get pointing of sky pixel
-			pointing sp = sky.hpxBase.pix2ang(skyPix);
-			ra_pix = sp.phi;
-			dec_pix = M_PI/2.0 - sp.theta;
-			
-			// safety initializers
-			rho=0.0; sigma=0.0; chi=0.0;
+            pointing sp = sky.hpxBase.pix2ang(skyPix);
+            ra_pix = sp.phi;
+            dec_pix = M_PI/2.0 - sp.theta;
+
+            // safety initializers
+            rho=0.0; sigma=0.0; chi=0.0;
             // compute rho sigma and chi at beam pixel
-			SphericalTransformations::rho_sigma_chi_pix( 
-				&rho, &sigma, &chi,
-				ra_bc , dec_bc, pa_bc,
-				ra_pix, dec_pix );
+            SphericalTransformations::rho_sigma_chi_pix(
+                &rho, &sigma, &chi,
+                ra_bc , dec_bc, pa_bc,
+                ra_pix, dec_pix );
             #ifdef CONVOLVER_CHIASPABC
             chi = pa_bc;
             #endif
@@ -164,7 +164,7 @@ void Convolver::beam_times_sky(
             {
                 // keep track of the sum of weigths
                 double ws = 0.0;
-                for(int i=0; i < 4; i++) 
+                for(int i=0; i < 4; i++)
                 {
                     ni = neigh[i];
                     if(ni < beam.size())
@@ -189,7 +189,7 @@ void Convolver::beam_times_sky(
               + sky.sQ[skyPix]*(-beam_b[1]*c2chi + beam_b[2]*s2chi)
               + sky.sU[skyPix]*(-beam_b[2]*c2chi - beam_b[1]*s2chi);
         }
-	}
-	(*da) = data_a;
-	(*db) = data_b;
+    }
+    (*da) = data_a;
+    (*db) = data_b;
 }

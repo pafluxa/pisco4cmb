@@ -112,14 +112,14 @@ int main(int argc, char** argv )
                 outfilePath.assign(optarg);
                 continue;
             case 't':
-                if(char(optarg[0]) == 'f'){ 
-                    beamsFromGauss = false; 
+                if(char(optarg[0]) == 'f'){
+                    beamsFromGauss = false;
                 }
                 else if(char(optarg[0]) == 'g'){
-                    beamsFromGauss = true; 
+                    beamsFromGauss = true;
                 }
-                else { 
-                    throw std::invalid_argument("error"); 
+                else {
+                    throw std::invalid_argument("error");
                 }
             case 'a':
                 beamAPath.assign(optarg);
@@ -162,20 +162,20 @@ int main(int argc, char** argv )
     double detectorAngle[1];
     double positionAngles[3] = {-M_PI_4, 0, M_PI_4};
     //double positionAngles[3] = {M_PI_4, 0, -M_PI_4};
-	// every PSB scans the sky 3 times at three different angles
-	for(double bcpa: positionAngles)
-	{
-	    // zero-out data buffer
-	    std::memset(psbDataA, 0, sizeof(double)*NSAMPLES);
-	    std::memset(psbDataB, 0, sizeof(double)*NSAMPLES);
+    // every PSB scans the sky 3 times at three different angles
+    for(double bcpa: positionAngles)
+    {
+        // zero-out data buffer
+        std::memset(psbDataA, 0, sizeof(double)*NSAMPLES);
+        std::memset(psbDataB, 0, sizeof(double)*NSAMPLES);
         init_point_source_scan(
             M_PI, 0.0, bcpa,
             0.2, 0.2,
             NSAMPLES_GRID, NSAMPLES_GRID,
             ra, dec, psi);
-	    // compute convolution for detector A and B of PSB
-	    cconv.exec_convolution(psbDataA, psbDataB, 'p', scan, sky, beam);
-	    // project detector data to map-making matrices
+        // compute convolution for detector A and B of PSB
+        cconv.exec_convolution(psbDataA, psbDataB, 'p', scan, sky, beam);
+        // project detector data to map-making matrices
         if(projDets[0] == 'a' || projDets[0] == 'p') {
             // project detector a
             detectorAngle[0] = 0;
@@ -202,7 +202,7 @@ int main(int argc, char** argv )
                 AtA, AtD
             );
         }
-	}
+    }
     std::memset(skyI, 0, sizeof(float)*NPIXELS_SKY);
     std::memset(skyQ, 0, sizeof(float)*NPIXELS_SKY);
     std::memset(skyU, 0, sizeof(float)*NPIXELS_SKY);
@@ -290,7 +290,7 @@ void allocate_everything(void){
     mapPixels = (int*)malloc(sizeof(int)*NPIXELS_SKY);
     // all pixels are mapped
     for(int i=0; i < NPIXELS_SKY; i++){ mapPixels[i] = i; }
-    
+
     psbDataA = (double*)malloc(sizeof(float)*NSAMPLES);
     psbDataB = (double*)malloc(sizeof(float)*NSAMPLES);
 

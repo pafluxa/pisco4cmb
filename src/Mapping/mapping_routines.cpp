@@ -15,7 +15,7 @@
 //extern "C" int dgesv_(int *n, int *nrhs, double *a,
 //           int *lda, int *ipiv, double *b, int *ldb, int *info);
 extern "C" {
-     void dgesv_(int *n, int *nrhs,  double *a,  int  *lda,  
+     void dgesv_(int *n, int *nrhs,  double *a,  int  *lda,
            int *ipivot, double *b, int *ldb, int *info) ;
 }
 
@@ -23,7 +23,7 @@ void
 libmapping_project_data_to_matrices
 (
     // input
-    int nsamples , int ndets, 
+    int nsamples , int ndets,
     double ra[], double dec[], double pa[],
     double pol_angles[],
     double data[] , int bad_data_samples[], int dets_to_map[],
@@ -38,7 +38,7 @@ libmapping_project_data_to_matrices
     healpixMap *mask;
     mask = healpixMap_new();
     healpixMap_allocate(map_nside, mask);
-    healpixMap_set_mask(mask,  pixels_in_the_map, map_size); 
+    healpixMap_set_mask(mask,  pixels_in_the_map, map_size);
     // compute central pixel (dec=0, ra=PI)
     long CENTER_INDEX;
     ang2pix_ring(map_nside, M_PI_2, M_PI, &CENTER_INDEX);
@@ -46,9 +46,9 @@ libmapping_project_data_to_matrices
     for(int det=0; det < ndets; det++)
     {
         if(dets_to_map[det] == 0)
-        {   
+        {
             double pol_angle = pol_angles[det];
-            
+
             for(int sample=0; sample < nsamples; sample++)
             {
                 if(bad_data_samples[det*nsamples + sample] == 0)
@@ -56,7 +56,7 @@ libmapping_project_data_to_matrices
                     double _phi, _theta, _psi;
                     _phi   = ra[det * nsamples + sample];
                     _theta = M_PI_2 - dec[det * nsamples + sample];
-                    // Passed arguments are counterclockwise on the sky 
+                    // Passed arguments are counterclockwise on the sky
                     // CMB requires clockwise
                     _psi   = -(pol_angle + pa[det*nsamples + sample]);
                     long pix;
@@ -88,7 +88,7 @@ libmapping_project_data_to_matrices
 
                 }
             }
-        
+
         }
 
     }
@@ -106,7 +106,7 @@ libmapping_get_IQU_from_matrices
     // input
     int map_nside, int map_size ,
     double AtA[], double AtD[], int pixels_in_the_map[],
-	// output
+    // output
     float I[], float Q[], float U[], float W[]
 )
 {
@@ -116,7 +116,7 @@ libmapping_get_IQU_from_matrices
     healpixMap *mask;
     mask = healpixMap_new();
     healpixMap_allocate(map_nside, mask);
-    healpixMap_set_mask(mask,  pixels_in_the_map, map_size); 
+    healpixMap_set_mask(mask,  pixels_in_the_map, map_size);
     // compute central pixel (dec=0, ra=PI)
     long CENTER_INDEX;
     ang2pix_ring(map_nside, M_PI_2, M_PI, &CENTER_INDEX);
@@ -129,43 +129,43 @@ libmapping_get_IQU_from_matrices
         int ipiv[3];
         int ldb = 3;
         int info ;
-		 
+
         double AtA_pix[n][lda];
         double AtD_pix[nrhs][ldb];
         // Setup AtA_pix in column major order
         AtA_pix[0][0] = AtA[0 + 9*index];
         AtA_pix[1][0] = AtA[1 + 9*index];
         AtA_pix[2][0] = AtA[2 + 9*index];
-        
+
         AtA_pix[0][1] = AtA[3 + 9*index];
         AtA_pix[1][1] = AtA[4 + 9*index];
         AtA_pix[2][1] = AtA[5 + 9*index];
-        
+
         AtA_pix[0][2] = AtA[6 + 9*index];
         AtA_pix[1][2] = AtA[7 + 9*index];
         AtA_pix[2][2] = AtA[8 + 9*index];
-        
+
         AtD_pix[0][0] = AtD[0 + 3*index];
         AtD_pix[0][1] = AtD[1 + 3*index];
         AtD_pix[0][2] = AtD[2 + 3*index];
-        
+
         double ii = 0.0;
         double qq = 0.0;
         double uu = 0.0;
         double hits = AtA_pix[0][0];
-        
+
         //int map_pixel = healpixMap_pix2idx(mask, index);
         int map_pixel = index;
         // Solve AtA_pix x X = AtD_pix
-    	if(hits >= 3)
+        if(hits >= 3)
         {
             dgesv_(
-                &n, 
-                &nrhs, &AtA_pix[0][0], &lda, ipiv, 
-                &AtD_pix[0][0], &ldb, 
+                &n,
+                &nrhs, &AtA_pix[0][0], &lda, ipiv,
+                &AtD_pix[0][0], &ldb,
                 &info);
-                
-            if(info != 0) 
+
+            if(info != 0)
             {
                 printf("The diagonal element of the triangular factor of A,\n");
                 printf("AtA_pix(%i,%i) is zero, so that A is singular;\n", info, info);
@@ -174,7 +174,7 @@ libmapping_get_IQU_from_matrices
                 qq = 0.0;
                 uu = 0.0;
                 hits = 0;
-            } 
+            }
             else
             {
                 ii = AtD_pix[0][0];
@@ -182,7 +182,7 @@ libmapping_get_IQU_from_matrices
                 uu = AtD_pix[0][2];
             }
             //if(map_pixel == CENTER_INDEX) printf("I Q U: %le %le %le \n", ii, qq, uu);
-        } 
+        }
         I[map_pixel] += ii;
         Q[map_pixel] += qq;
         U[map_pixel] += uu;

@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.9)
 # Tell Cmake about where to find scripts to look up for some dependencies
-set(CMAKE_MODULE_PATH 
-    ${CMAKE_MODULE_PATH} 
+set(CMAKE_MODULE_PATH
+    ${CMAKE_MODULE_PATH}
     "${CMAKE_SOURCE_DIR}/cmake_modules/")
 set(CMAKE_DISABLE_IN_SOURCE_BUILD ON)
 set(CMAKE_DISABLE_SOURCE_CHANGES ON)
@@ -27,9 +27,9 @@ find_package(Sofa REQUIRED)
 find_package(cfitsio REQUIRED)
 
 # it seems like CMAKE can't find openmp on its own...
-SET(CMAKE_CXX_FLAGS 
+SET(CMAKE_CXX_FLAGS
   "${CMAKE_CXX_FLAGS} -march=native -fopenmp -pthread -O2")
- 
+
 # flag to disable correct polarization angle calculation
 if(CONVOLVER_DISABLECHI)
   add_definitions(-DCONVOLVER_DISABLECHI)
@@ -42,8 +42,8 @@ endif()
 if(CONVOLVER_OPENMPENABLED)
   add_definitions(-DCONVOLVER_OPENMPENABLED)
 endif()
- 
-# library 
+
+# library
 add_library(pisco SHARED
     src/Sky/sky.cpp
     src/Scan/scan.cpp
@@ -58,7 +58,7 @@ add_library(pisco SHARED
     src/Convolver/convolver.cpp
 )
 target_include_directories(pisco PUBLIC
-	src/
+    src/
     ${SOFA_INCLUDE_DIR}
     ${OpenMP_INCLUDE_DIRS}
     ${HEALPIX_INCLUDE_DIR}
@@ -70,10 +70,10 @@ add_executable(simulate_point_source_scan.x
     src/sim_point_source_scan.cpp
 )
 target_include_directories(simulate_point_source_scan.x PRIVATE
-	src/
+    src/
 )
 target_link_libraries(simulate_point_source_scan.x PRIVATE
-	pisco
+    pisco
     ${SOFA_LIBRARIES}
     ${OpenMP_LIBRARIES}
     ${LAPACK_LIBRARIES}

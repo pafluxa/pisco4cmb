@@ -16,10 +16,10 @@ bool normalize_by_sum(float v[], int N)
     double sum = 0.0;
     for(int i = 0; i < N; i++)
     {
-        sum += double(v[i]);   
+        sum += double(v[i]);
     }
     if(abs(sum) < 1e-18)
-    { 
+    {
         std::cerr << "WARNING: norm of vector is very small." << std::endl;
         return false;
     }
@@ -27,12 +27,12 @@ bool normalize_by_sum(float v[], int N)
     {
         v[i] = v[i]/sum;
     }
-    
+
     return true;
 }
 
 std::complex<double> complex_2ddot(
-    std::complex<double> w[2], 
+    std::complex<double> w[2],
     std::complex<double> z[2])
 /*
  * computes the dot product of vectors w and z, where w = (w_x, w_y) and
@@ -44,7 +44,7 @@ std::complex<double> complex_2ddot(
 {
     std::complex<double> dp;
     dp = z[0]*std::conj(w[0]) + z[1]*std::conj(w[1]);
-        
+
     return dp;
 }
 
@@ -56,7 +56,7 @@ double complex_2dnorm(std::complex<double> w[2])
 {
     double norm;
     norm = std::real(complex_2ddot(w, w));
-    
+
     return norm;
 }
 
@@ -86,7 +86,7 @@ void PolBeam::alloc_buffers()
     aBeams[3] = (float*)malloc(buffSize);
     aBeams[4] = (float*)malloc(buffSize);
     aBeams[5] = (float*)malloc(buffSize);
-    
+
     bBeams[0] = (float*)malloc(buffSize);
     bBeams[1] = (float*)malloc(buffSize);
     bBeams[2] = (float*)malloc(buffSize);
@@ -98,9 +98,9 @@ void PolBeam::alloc_buffers()
     Qa = (float*)malloc(buffSize);
     Ua = (float*)malloc(buffSize);
     Va = (float*)malloc(buffSize);
-       
+
     Ib = (float*)malloc(buffSize);
-    Qb = (float*)malloc(buffSize);    
+    Qb = (float*)malloc(buffSize);
     Ub = (float*)malloc(buffSize);
     Vb = (float*)malloc(buffSize);
 }
@@ -120,7 +120,7 @@ void PolBeam::free_buffers()
     free(bBeams[3]);
     free(bBeams[4]);
     free(bBeams[5]);
-    
+
     free(Ia);
     free(Qa);
     free(Ua);
@@ -140,22 +140,22 @@ PolBeam::beam_from_fields
     double* magEcx, double* phaseEcx
 )
 /*
- * Computes the beamsor of a single PSB detector a or b using the 
+ * Computes the beamsor of a single PSB detector a or b using the
  * electric field power density (EFPD) of an antenna. This routine
  * is based on the formalism found in Rosset el at. 2010, with significant
  * contribution from Michael K. Brewer.
- * 
+ *
  * The field must be specified as 4 arrays containing the magnitude and
- * phase of the EFPD along the co and cross polar directions of the 
+ * phase of the EFPD along the co and cross polar directions of the
  * antenna basis.
- * 
+ *
  * \param polFlag: set to 'a' ('b') on the particular detector beam of
- *        the PSB that is being loaded. 
+ *        the PSB that is being loaded.
  * \param magEco: array with co-polar EFPD magnitude.
  * \param phaseEco: array with the phase of co-polar EFPD.
  * \param magEcx: array with cross-polar EFPD magnitude along.
  * \param phaseEcx: array with the phase of cross-polar EFPD.
- * 
+ *
  */
 {
     float *I;
@@ -168,20 +168,20 @@ PolBeam::beam_from_fields
     #ifdef POLBEAM_DUMPBEAMS
     std::string pf(1, polFlag);
     std::string dumpfilepath = "dump_detector_" + pf + ".txt";
-    std::ofstream dumpfile(dumpfilepath);    
-    std::cerr << "INFO: DUMPING I, Q, U and V beams to " 
+    std::ofstream dumpfile(dumpfilepath);
+    std::cerr << "INFO: DUMPING I, Q, U and V beams to "
               << dumpfilepath << std::endl;
     #endif
-    
+
     if(polFlag == 'a')
-    {	
+    {
         I = Ia;
         Q = Qa;
         U = Ua;
         V = Va;
     }
     if(polFlag == 'b')
-    {	
+    {
         I = Ib;
         Q = Qb;
         U = Ub;
@@ -192,7 +192,7 @@ PolBeam::beam_from_fields
         // component along x basis vector
         Eco = std::polar(magEco[i], phaseEco[i]);
         // component along y basis vector
-        Ecx = std::polar(magEcx[i], phaseEcx[i]); 
+        Ecx = std::polar(magEcx[i], phaseEcx[i]);
         // compute \tilde{I}
         I[i] = std::norm(Eco) + std::norm(Ecx);
         // compute \tilde{Q}
@@ -204,9 +204,9 @@ PolBeam::beam_from_fields
         // but it shall stay 0 until I figure it out properly
         V[i] = 0;
         #ifdef POLBEAM_DUMPBEAMS
-        dumpfile << I[i] << " " 
-                 << Q[i] << " " 
-                 << U[i] << " " 
+        dumpfile << I[i] << " "
+                 << Q[i] << " "
+                 << U[i] << " "
                  << V[i] << std::endl;
         #endif
     }
@@ -218,24 +218,24 @@ void PolBeam::build_beams(void)
     for(i = 0; i < nPixels; i++)
     {
         aBeams[0][i] = Ia[i] + epsilon*Ib[i];
-        
+
         aBeams[1][i] = Qa[i] - epsilon*Qb[i];
         aBeams[2][i] = Ua[i] - epsilon*Ub[i];
-        
+
         aBeams[3][i] = Ua[i] - epsilon*Ub[i];
         aBeams[4][i] = Qa[i] - epsilon*Qb[i];
-        
+
         aBeams[5][i] = 0;//(Va[i] + epsilon*Vb[i]);
-        
+
         bBeams[0][i] = Ib[i] + epsilon*Ia[i];
-        
+
         bBeams[1][i] = Qb[i] - epsilon*Qa[i];
         bBeams[2][i] = Ub[i] - epsilon*Ua[i];
-        
+
         bBeams[3][i] = Ub[i] - epsilon*Ua[i];
         bBeams[4][i] = Qb[i] - epsilon*Qa[i];
-        
-        bBeams[5][i] = 0;//(Vb[i] + epsilon*Va[i]);            
+
+        bBeams[5][i] = 0;//(Vb[i] + epsilon*Va[i]);
     }
     //normalize so integral below beams is 1.0
     //edit: normalization should be made as a post-processing step,
@@ -243,15 +243,15 @@ void PolBeam::build_beams(void)
     //      the timestreams after they are acquired.
     /*
     for(int i = 0; i < 6; i++)
-    {   
+    {
         if(!normalize_by_sum(aBeams[i], nPixels))
         {
-            std::cerr << "WARNING: A-beam idx " << i << " is zero" 
+            std::cerr << "WARNING: A-beam idx " << i << " is zero"
                       << std::endl;
         }
         if(!normalize_by_sum(bBeams[i], nPixels))
         {
-            std::cerr << "WARNING: B-beam idx " << i << " is zero" 
+            std::cerr << "WARNING: B-beam idx " << i << " is zero"
                       << std::endl;
         }
     }
@@ -290,7 +290,7 @@ void PolBeam::make_unpol_gaussian_elliptical_beams(
     double* magEcx = (double*)malloc(buffSize);
     double* phsEco = (double*)malloc(buffSize);
     double* phsEcx = (double*)malloc(buffSize);
-    
+
     // Convert FWHM in degres to sigma, in radians
     double deg2rad = M_PI/180.0;
     // From https://en.wikipedia.org/wiki/Full_width_at_half_maximum:

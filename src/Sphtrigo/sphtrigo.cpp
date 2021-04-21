@@ -1,14 +1,14 @@
 #include "sphtrigo.hpp"
 
 void SphericalTransformations::rho_sigma_chi_pix(
-	double   *rho, double  *sigma, double    *chi,
+    double   *rho, double  *sigma, double    *chi,
     double  ra_bc, double  dec_bc, double  psi_bc,
     double ra_pix, double dec_pix )
-/*   
+/*
  *   Calculates radial, polar offsets and position angle of the co-polarization
- *   unit vector using Ludwig's 3rd definition at a location offset from beam center. 
- *   
- *   All outputs use the HEALPix coordinate system and the CMB polarization angle 
+ *   unit vector using Ludwig's 3rd definition at a location offset from beam center.
+ *
+ *   All outputs use the HEALPix coordinate system and the CMB polarization angle
  *   convention as described in Fluxa et al. 2019 (https://arxiv.org/abs/1908.05662)
  *
  *   Outputs:  rho is the radial offset
@@ -20,7 +20,7 @@ void SphericalTransformations::rho_sigma_chi_pix(
  *             psi_bc  Position angle of beam center clockwise positive from North
  *             ra_pix  Right Ascension of offset position
  *             dec_pix Declination of offset position
- * 
+ *
  *   Author: Michael K. Brewer (2019).
  */
 /*
@@ -32,10 +32,10 @@ void SphericalTransformations::rho_sigma_chi_pix(
   double dra = ra_pix - ra_bc;
   double sd = sin(dra);
   double cd = cos(dra);
-                                                                                                              
-  double gamma = atan2(sd * cdp, sdp * cdc - cdp * sdc * cd);  
-  double delta = atan2(sd * cdc, sdc * cdp - cdc * sdp * cd);  
-  double crho  = sdc * sdp + cdc * cdp * cd;                                                                                   
+
+  double gamma = atan2(sd * cdp, sdp * cdc - cdp * sdc * cd);
+  double delta = atan2(sd * cdc, sdc * cdp - cdc * sdp * cd);
+  double crho  = sdc * sdp + cdc * cdp * cd;
 
   if(crho >= 1.0) {
     *rho = 0.0;
@@ -61,25 +61,25 @@ void SphericalTransformations::rho_sigma_chi_pix(
   double dra = ra_pix - ra_bc;
   double sd = sin(dra);
   double cd = cos(dra);
-  
+
   double crho  = sdc * sdp + cdc * cdp * cd;
   if(crho >= 1.0)*rho = 0.0;
   else *rho = acos(crho);
-  if(*rho > 1.0e-6) { 
-    beta  = atan2(sd * cdc, sdc * cdp - cdc * sdp * cd);  
+  if(*rho > 1.0e-6) {
+    beta  = atan2(sd * cdc, sdc * cdp - cdc * sdp * cd);
     alpha = atan2(sd * cdp, sdp * cdc - cdp * sdc * cd);
-  } 
+  }
   else {
     // atan2(0,0) returns 0 instead of pi/2
     beta  = M_PI_2;
     alpha = M_PI_2;
-  } 
+  }
   *sigma = M_PI - alpha - psi_bc;
   if(*sigma < 0.0)*sigma += 2.0 * M_PI;
   else if(*sigma > 2.0 * M_PI)*sigma -= 2.0 * M_PI;
   *chi = beta - *sigma;
   if(*chi < -M_PI)*chi += 2.0 * M_PI;
-  
+
 }
 
 void SphericalTransformations::theta_phi_psi_pix
@@ -102,7 +102,7 @@ void SphericalTransformations::theta_phi_psi_pix
  *             ra_pix  Right Ascension of offset position
  *             dec_pix Declination of offset position
  */
-    
+
 {
   double cdc = cos(dec_bc);
   double sdc = sin(dec_bc);
