@@ -108,8 +108,8 @@ void Convolver::beam_times_sky(
 	double ra_pix, dec_pix;
     double rho, sigma, chi, c2chi, s2chi;
     
-    double beam_a[5]; 
-    double beam_b[5];
+    double beam_a[3]; 
+    double beam_b[3];
 
     long i, ni, skyPix;
     int range_begin, range_end, rn;
@@ -155,8 +155,8 @@ void Convolver::beam_times_sky(
             c2chi = cos(2*chi);
             s2chi = sin(2*chi);
             // safety initializers
-            std::memset(beam_a, 0.0, sizeof(double)*5);
-            std::memset(beam_b, 0.0, sizeof(double)*5);
+            std::memset(beam_a, 0.0, sizeof(double)*3);
+            std::memset(beam_b, 0.0, sizeof(double)*3);
             // interpolate beam at (rho,sigma)
             pointing bp(rho, sigma);
             beam.hpxBase.get_interpol(bp, neigh, wgh);
