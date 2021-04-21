@@ -18,7 +18,7 @@ class Convolver
         Convolver(unsigned long nsamples);
        ~Convolver();
         void exec_convolution(
-            float* data_a, float* data_b,
+            double* data_a, double* data_b,
             char polFlag,
             Scan& scan, Sky& sky, PolBeam& beam);
 
@@ -37,7 +37,7 @@ class Convolver
             float phi0,
             float theta0,
             float psi0,
-            float* data_a, float *data_b);
+            double* data_a, double *data_b);
 
 };
 

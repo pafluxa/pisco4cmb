@@ -30,14 +30,18 @@ find_package(cfitsio REQUIRED)
 SET(CMAKE_CXX_FLAGS 
   "${CMAKE_CXX_FLAGS} -march=native -fopenmp -pthread -O2")
  
+# flag to disable correct polarization angle calculation
 if(CONVOLVER_DISABLECHI)
   add_definitions(-DCONVOLVER_DISABLECHI)
 endif()
-
-if(CONVOLVER_DISABLECHI)
-  add_definitions(-DCONVOLVER_DISABLECHI)
+# flag to enable dumping beams to a file
+if(POLBEAM_DUMPBEAMS)
+  add_definitions(-DPOLBEAM_DUMPBEAMS)
 endif()
-
+# flag to enable parallelization
+if(CONVOLVER_OPENMPENABLED)
+  add_definitions(-DCONVOLVER_OPENMPENABLED)
+endif()
  
 # library 
 add_library(pisco SHARED

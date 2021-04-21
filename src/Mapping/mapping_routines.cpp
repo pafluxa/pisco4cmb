@@ -26,7 +26,7 @@ libmapping_project_data_to_matrices
     int nsamples , int ndets, 
     double ra[], double dec[], double pa[],
     double pol_angles[],
-    float data[] , int bad_data_samples[], int dets_to_map[],
+    double data[] , int bad_data_samples[], int dets_to_map[],
     int map_nside,
     int map_size , int pixels_in_the_map[],
     // output

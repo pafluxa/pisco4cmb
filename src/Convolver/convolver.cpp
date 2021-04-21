@@ -39,7 +39,7 @@ Convolver::~Convolver()
 }
 
 void Convolver::exec_convolution(
-	float* data_a, float* data_b, 
+	double* data_a, double* data_b, 
     char polFlag,
 	Scan& scan, 
 	Sky& sky,
@@ -58,8 +58,8 @@ void Convolver::exec_convolution(
     {
         // declare these internally because they only
         // live inside the parallel region
-        float da = 0.0;
-        float db = 0.0;
+        double da = 0.0;
+        double db = 0.0;
         double ra_bc   = ra_coords[i]; 
         double dec_bc = dec_coords[i]; 
         // Passed arguments are counterclockwise on the sky 
@@ -98,7 +98,7 @@ void Convolver::beam_times_sky(
 	float ra_bc, 
     float dec_bc, \
     float pa_bc,
-    float* da, float* db)
+    double* da, double* db)
 {
 	double ww;
     double rmax;
@@ -158,20 +158,25 @@ void Convolver::beam_times_sky(
             std::memset(beam_a, 0.0, sizeof(double)*5);
             std::memset(beam_b, 0.0, sizeof(double)*5);
             // interpolate beam at (rho,sigma)
-			pointing bp(rho, sigma);
-			beam.hpxBase.get_interpol(bp, neigh, wgh);
-			for(int b=0; b < 5; b++)
+            pointing bp(rho, sigma);
+            beam.hpxBase.get_interpol(bp, neigh, wgh);
+            for(int b=0; b < 3; b++)
             {
+                // keep track of the sum of weigths
+                double ws = 0.0;
                 for(int i=0; i < 4; i++) 
                 {
                     ni = neigh[i];
                     if(ni < beam.size())
                     {
                         ww = wgh[i];
+                        ws += ww;
                         beam_a[b] += double(beam.aBeams[b][ni])*ww;
                         beam_b[b] += double(beam.bBeams[b][ni])*ww;
                     }
                 }
+                beam_a[b] /= ws;
+                beam_b[b] /= ws;
             }
             // data = beam x sky
             data_a = data_a 
@@ -184,6 +189,6 @@ void Convolver::beam_times_sky(
               + sky.sU[skyPix]*(-beam_b[3]*c2chi - beam_b[4]*s2chi);
 		}
 	}
-	(*da) = (float)(data_a);
-	(*db) = (float)(data_b);
+	(*da) = data_a;
+	(*db) = data_b;
 }
