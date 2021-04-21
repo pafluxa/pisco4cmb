@@ -160,8 +160,11 @@ int main(int argc, char** argv )
     // setup detetctor angle arays
     int detectorMask[] = {0};
     double detectorAngle[1];
-    double positionAngles[3] = {-M_PI_4, 0, M_PI_4};
-    //double positionAngles[3] = {M_PI_4, 0, -M_PI_4};
+    double positionAngles[3] = {M_PI_4, 0, -M_PI_4};
+    //double positionAngles[3] = {-M_PI_4, 0, M_PI_4};
+    std::cout << positionAngles[0] << " ";
+    std::cout << positionAngles[1] << " ";
+    std::cout << positionAngles[2] << " " << std::endl;
     // every PSB scans the sky 3 times at three different angles
     for(double bcpa: positionAngles)
     {
