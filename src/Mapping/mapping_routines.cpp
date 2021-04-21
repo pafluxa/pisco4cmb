@@ -5,15 +5,15 @@
 #include <chealpix.h>
 #include <omp.h>
 
+/** Disabling mask support
 #include "Mapping/healpix_map.h"
+**/
 
+// why is this here?
+//#ifndef M_PI_2
+//#define M_PI_2 (1.5707963267948966)
+//#endif
 
-#ifndef M_PI_2
-#define M_PI_2 (1.5707963267948966)
-#endif
-
-//extern "C" int dgesv_(int *n, int *nrhs, double *a,
-//           int *lda, int *ipiv, double *b, int *ldb, int *info);
 extern "C" {
      void dgesv_(int *n, int *nrhs,  double *a,  int  *lda,
            int *ipivot, double *b, int *ldb, int *info) ;
@@ -33,16 +33,19 @@ libmapping_project_data_to_matrices
     double AtA[], double AtD[]
 )
 {
-    // Create healpixMaps that use the Python buffers
-    // Note that all maps share the same mask!
+    /** Disabling mask support
+     * 
     healpixMap *mask;
     mask = healpixMap_new();
     healpixMap_allocate(map_nside, mask);
-    healpixMap_set_mask(mask,  pixels_in_the_map, map_size);
+    healpixMap_set_mask(mask, pixels_in_the_map, map_size);
+    **/
     // compute central pixel (dec=0, ra=PI)
     long CENTER_INDEX;
     ang2pix_ring(map_nside, M_PI_2, M_PI, &CENTER_INDEX);
+    /** disabling mask support
     CENTER_INDEX = healpixMap_pix2idx(mask, CENTER_INDEX);
+    **/
     for(int det=0; det < ndets; det++)
     {
         if(dets_to_map[det] == 0)
@@ -61,10 +64,12 @@ libmapping_project_data_to_matrices
                     _psi   = -(pol_angle + pa[det*nsamples + sample]);
                     long pix;
                     ang2pix_ring(map_nside, _theta, _phi, &pix);
+                    /** disabling mask support
                     // Transform pixel number to array index using the mask.
                     // Only project if the pixel is actually in the map.
-                    long idx = healpixMap_pix2idx(mask, pix);
-                    //long idx = pix;
+                    //long idx = healpixMap_pix2idx(mask, pix);
+                    **/
+                    long idx = pix;
                     if(idx >= 0)
                     {
                         double d = data[det*nsamples + sample];
@@ -110,17 +115,19 @@ libmapping_get_IQU_from_matrices
     float I[], float Q[], float U[], float W[]
 )
 {
-    // Setup map mask to translate matrices indexes into map pixels
-    // Create healpixMaps that use the Python buffers
-    // Note that all maps share the same mask!
+    /** Disabling mask support
+     * 
     healpixMap *mask;
     mask = healpixMap_new();
     healpixMap_allocate(map_nside, mask);
-    healpixMap_set_mask(mask,  pixels_in_the_map, map_size);
+    healpixMap_set_mask(mask, pixels_in_the_map, map_size);
+    **/
     // compute central pixel (dec=0, ra=PI)
     long CENTER_INDEX;
     ang2pix_ring(map_nside, M_PI_2, M_PI, &CENTER_INDEX);
+    /** Disabling mask support
     CENTER_INDEX = healpixMap_pix2idx(mask, CENTER_INDEX);
+    **/
     for(long index = 0; index < map_size; index++)
     {
         int n = 3;

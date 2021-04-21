@@ -10,8 +10,7 @@ Sky::Sky(
 {
     nside = _nside;
     nPixels = 12*nside*nside;
-	hpxBase.SetNside(nside, RING);
-	
+    hpxBase = new Healpix_Base(nside, RING, SET_NSIDE);
 	sI = I;
 	sQ = Q;
 	sU = U;

@@ -60,15 +60,17 @@ double complex_2dnorm(std::complex<double> w[2])
     return norm;
 }
 
-PolBeam::PolBeam(int nside, long nPixels) :
-    nside{nside}, \
-    nPixels{nPixels}, \
-    epsilon{0.0}
+PolBeam::PolBeam(int _nside, long _nPixels)
 {
-    hpxBase.SetNside(nside, RING);
-    pointing p = hpxBase.pix2ang(nPixels );
-
+    nside = _nside;
+    nPixels = _nPixels;
+    // epsilon is set to zero for now
+    epsilon = 0.0;
+    
+    hpxBase = new Healpix_Base(nside, RING, SET_NSIDE);
+    pointing p = hpxBase->pix2ang(nPixels);
     rhoMax = p.theta;
+    
     alloc_buffers();
 }
 
@@ -314,7 +316,7 @@ void PolBeam::make_unpol_gaussian_elliptical_beams(
     double rho,sig,val;
     for(int bpix = 0; bpix < nPixels; bpix++)
     {
-        pointing bp = hpxBase.pix2ang(bpix);
+        pointing bp = hpxBase->pix2ang(bpix);
         rho = bp.theta;
         sig = bp.phi;
 

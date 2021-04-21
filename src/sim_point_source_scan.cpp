@@ -24,10 +24,10 @@
 #include <healpix_base.h>
 #include <pointing.h>
 
-#define NSIDE_SKY 256
+#define NSIDE_SKY (256)
 #define NPIXELS_SKY (12*(NSIDE_SKY)*(NSIDE_SKY))
-#define NSAMPLES_GRID 256
-#define NSAMPLES NSAMPLES_GRID*NSAMPLES_GRID
+#define NSAMPLES_GRID 128
+#define NSAMPLES (NSAMPLES_GRID*NSAMPLES_GRID)
 #define NSIDE_BEAM 2048
 /** how to calculate the number of pixels below
 import healpy
@@ -138,9 +138,10 @@ int main(int argc, char** argv )
     std::cout << beamBPath << std::endl;
     std::cout << outfilePath << std::endl;
     allocate_everything();
-
+    // initialize sky object
     Sky sky(NSIDE_SKY, skyI, skyQ, skyU, skyV);
     init_point_source_sky(M_PI, 0.0, pI, pQ, pU, skyI, skyQ, skyU, skyV);
+    // initialize polarized beam object. read beam data from disk
     PolBeam beam(NSIDE_BEAM, NPIXELS_BEAM);
     if(beamsFromGauss) {
         bfwhmx = std::stod(beamAPath.c_str());
@@ -151,17 +152,16 @@ int main(int argc, char** argv )
         load_beam_data('a', beamAPath, beam);
         load_beam_data('b', beamBPath, beam);
     }
-    //
     beam.build_beams();
-
+    // initialize scan
     Scan scan(NSAMPLES, ra, dec, psi);
-
-    Convolver cconv(NSAMPLES);
+    // initialize convolver object
+    Convolver cconv(&scan, &sky, &beam);
     // setup detetctor angle arays
     int detectorMask[] = {0};
     double detectorAngle[1];
-    double positionAngles[3] = {M_PI_4, 0, -M_PI_4};
-    //double positionAngles[3] = {-M_PI_4, 0, M_PI_4};
+    //double positionAngles[3] = {M_PI_4, 0, -M_PI_4};
+    double positionAngles[3] = {-M_PI_4, 0, M_PI_4};
     std::cout << positionAngles[0] << " ";
     std::cout << positionAngles[1] << " ";
     std::cout << positionAngles[2] << " " << std::endl;
@@ -177,7 +177,7 @@ int main(int argc, char** argv )
             NSAMPLES_GRID, NSAMPLES_GRID,
             ra, dec, psi);
         // compute convolution for detector A and B of PSB
-        cconv.exec_convolution(psbDataA, psbDataB, 'p', scan, sky, beam);
+        cconv.exec_convolution('p', psbDataA, psbDataB);
         // project detector data to map-making matrices
         if(projDets[0] == 'a' || projDets[0] == 'p') {
             // project detector a
@@ -305,15 +305,21 @@ void free_everything(void) {
     free(skyQ);
     free(skyU);
     free(skyV);
+    std::cerr << "sky buffers freed" << std::endl;
     free(ra);
     free(dec);
     free(psi);
+    std::cerr << "pointing buffers freed" << std::endl;
     free(AtA);
     free(AtD);
+    std::cerr << "AtA and AtD buffers freed" << std::endl;
     free(scanMask);
+    std::cerr << "scanMask buffers freed" << std::endl;
     free(mapPixels);
+    std::cerr << "mapPixels buffers freed" << std::endl;
     free(psbDataA);
     free(psbDataB);
+    std::cerr << "data buffers freed" << std::endl;
 }
 
 void load_beam_data(char polFlag, std::string path, PolBeam& beam) {
