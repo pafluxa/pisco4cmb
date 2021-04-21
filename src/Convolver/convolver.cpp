@@ -113,7 +113,11 @@ void Convolver::beam_times_sky(
 	fix_arr< int,    4 > neigh;
 	fix_arr< double, 4 >   wgh;
 	rangeset<int> intraBeamRanges;
-	
+
+    #ifdef CONVOLVER_CHIASPABC
+    std::cerr < "using chi = pa_bc!" << std::endl;
+    #endif
+
     // find sky pixels around beam center, up to beam.rhoMax	
 	rmax = beam.get_rho_max();
 	pointing sc(M_PI_2 - dec_bc, ra_bc);
@@ -141,6 +145,9 @@ void Convolver::beam_times_sky(
 				&rho, &sigma, &chi,
 				ra_bc , dec_bc, pa_bc,
 				ra_pix, dec_pix );
+            #ifdef CONVOLVER_CHIASPABC
+            chi = pa_bc;
+            #endif
             c2chi = cos(2*chi);
             s2chi = sin(2*chi);
             // safety initializers
