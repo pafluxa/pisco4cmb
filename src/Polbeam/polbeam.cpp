@@ -7,14 +7,9 @@
 // to make use of Healpix_base pointing
 #include <pointing.h>
 
-#ifndef POLBEAM_DUMPBEAMS 
-#define POLBEAM_DUMPBEAMS true
-#endif
-
-#if POLBEAM_DUMPBEAMS
+#ifdef POLBEAM_DUMPBEAMS
 #include <fstream>
 #endif
-
 
 bool normalize_by_sum(float v[], int N)
 {
@@ -170,7 +165,7 @@ PolBeam::beam_from_fields
     std::complex<double> Eco;
     std::complex<double> Ecx;
 
-    #if POLBEAM_DUMPBEAMS
+    #ifdef POLBEAM_DUMPBEAMS
     std::string pf(1, polFlag);
     std::string dumpfilepath = "dump_detector_" + pf + ".txt";
     std::ofstream dumpfile(dumpfilepath);    
@@ -208,7 +203,7 @@ PolBeam::beam_from_fields
         // 2*std::real(-Eco*std::conj(Ecx) - std::conj(Eco)*Ecx)
         // but it shall stay 0 until I figure it out properly
         V[i] = 0;
-        #if POLBEAM_DUMPBEAMS
+        #ifdef POLBEAM_DUMPBEAMS
         dumpfile << I[i] << " " 
                  << Q[i] << " " 
                  << U[i] << " " 
