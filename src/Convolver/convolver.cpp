@@ -188,6 +188,7 @@ void Convolver::beam_times_sky(
               + sky.sI[skyPix]*(beam_b[0])
               + sky.sQ[skyPix]*(-beam_b[1]*c2chi + beam_b[2]*s2chi)
               + sky.sU[skyPix]*(-beam_b[2]*c2chi - beam_b[1]*s2chi);
+        }
 	}
 	(*da) = data_a;
 	(*db) = data_b;
