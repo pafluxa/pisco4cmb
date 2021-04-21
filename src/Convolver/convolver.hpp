@@ -15,28 +15,22 @@ class Convolver
 {
     public:
 
-        Convolver(unsigned long nsamples);
+        Convolver(const Scan* scan, const Sky* sky, const PolBeam* beam);
        ~Convolver();
-        void exec_convolution(
-            double* data_a, double* data_b,
-            char polFlag,
-            Scan& scan, Sky& sky, PolBeam& beam);
+        void exec_convolution(char polFlag, double* data_a, double* data_b);
 
     private:
 
         unsigned long nsamples;
-        unsigned int nthreads;
 
-        float* masterBuffer;
-        std::vector<long> bufferStart;
-        std::vector<long> bufferEnd;
+        const Scan* scan;
+        const Sky* sky;
+        const PolBeam* beam;
 
         void beam_times_sky(
-            Sky& sky,
-            PolBeam& beam,
-            float phi0,
-            float theta0,
-            float psi0,
+            double phi0,
+            double theta0,
+            double psi0,
             double* data_a, double *data_b);
 
 };
