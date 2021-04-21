@@ -179,14 +179,15 @@ void Convolver::beam_times_sky(
                 beam_b[b] /= ws;
             }
             // data = beam x sky
-            data_a = data_a 
+            data_a = data_a
               + sky.sI[skyPix]*(beam_a[0])
               + sky.sQ[skyPix]*(beam_a[1]*c2chi - beam_a[2]*s2chi)
-              + sky.sU[skyPix]*(beam_a[3]*c2chi + beam_a[4]*s2chi);
+              + sky.sU[skyPix]*(beam_a[2]*c2chi + beam_a[1]*s2chi);
+
             data_b = data_b
               + sky.sI[skyPix]*(beam_b[0])
               + sky.sQ[skyPix]*(-beam_b[1]*c2chi + beam_b[2]*s2chi)
-              + sky.sU[skyPix]*(-beam_b[3]*c2chi - beam_b[4]*s2chi);
+              + sky.sU[skyPix]*(-beam_b[2]*c2chi - beam_b[1]*s2chi);
 		}
 	}
 	(*da) = data_a;
