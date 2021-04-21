@@ -28,7 +28,7 @@ find_package(cfitsio REQUIRED)
 
 # it seems like CMAKE can't find openmp on its own...
 SET(CMAKE_CXX_FLAGS
-  "${CMAKE_CXX_FLAGS} -march=native -fopenmp -pthread -O2")
+  "${CMAKE_CXX_FLAGS} -march=native -fopenmp -pthread -O0")
 
 # flag to disable correct polarization angle calculation
 if(CONVOLVER_DISABLECHI)
