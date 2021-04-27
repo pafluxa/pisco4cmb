@@ -167,14 +167,6 @@ PolBeam::beam_from_fields
     std::complex<double> Eco;
     std::complex<double> Ecx;
 
-    #ifdef POLBEAM_DUMPBEAMS
-    std::string pf(1, polFlag);
-    std::string dumpfilepath = "dump_detector_" + pf + ".txt";
-    std::ofstream dumpfile(dumpfilepath);
-    std::cerr << "INFO: DUMPING I, Q, U and V beams to "
-              << dumpfilepath << std::endl;
-    #endif
-
     if(polFlag == 'a')
     {
         I = Ia;
@@ -205,40 +197,59 @@ PolBeam::beam_from_fields
         // 2*std::real(-Eco*std::conj(Ecx) - std::conj(Eco)*Ecx)
         // but it shall stay 0 until I figure it out properly
         V[i] = 0;
-        #ifdef POLBEAM_DUMPBEAMS
-        dumpfile << I[i] << " "
-                 << Q[i] << " "
-                 << U[i] << " "
-                 << V[i] << std::endl;
-        #endif
     }
 }
 
 void PolBeam::build_beams(void)
 {
+    #ifdef POLBEAM_DUMPBEAMS
+    std::string dumpfilepatha = "dump_detector_a.txt";
+    std::string dumpfilepathb = "dump_detector_b.txt";
+    std::ofstream dumpfilea(dumpfilepatha);
+    std::ofstream dumpfileb(dumpfilepathb);
+    std::cerr << "INFO: DUMPING I, Q, U and V beams to "
+              << dumpfilepatha << " and " << dumpfilepathb << std::endl;
+    #endif
+    
     long i;
     for(i = 0; i < nPixels; i++)
     {
         aBeams[0][i] = Ia[i] + epsilon*Ib[i];
-
         aBeams[1][i] = Qa[i] - epsilon*Qb[i];
         aBeams[2][i] = Ua[i] - epsilon*Ub[i];
-
         aBeams[3][i] = Ua[i] - epsilon*Ub[i];
         aBeams[4][i] = Qa[i] - epsilon*Qb[i];
-
         aBeams[5][i] = 0;//(Va[i] + epsilon*Vb[i]);
 
-        bBeams[0][i] = Ib[i] + epsilon*Ia[i];
+        #ifdef POLBEAM_DUMPBEAMS
+        dumpfilea 
+                 << aBeams[0][i] << " "
+                 << aBeams[1][i] << " "
+                 << aBeams[2][i] << " "
+                 << aBeams[3][i] << " "
+                 << aBeams[4][i] << std::endl;
+        #endif
 
+        bBeams[0][i] = Ib[i] + epsilon*Ia[i];
         bBeams[1][i] = Qb[i] - epsilon*Qa[i];
         bBeams[2][i] = Ub[i] - epsilon*Ua[i];
-
         bBeams[3][i] = Ub[i] - epsilon*Ua[i];
         bBeams[4][i] = Qb[i] - epsilon*Qa[i];
 
         bBeams[5][i] = 0;//(Vb[i] + epsilon*Va[i]);
+        #ifdef POLBEAM_DUMPBEAMS
+        dumpfileb 
+                 << bBeams[0][i] << " "
+                 << bBeams[1][i] << " "
+                 << bBeams[2][i] << " "
+                 << bBeams[3][i] << " "
+                 << bBeams[4][i] << std::endl;
+        #endif
     }
+    #ifdef POLBEAM_DUMPBEAMS
+    dumpfilea.close();
+    dumpfileb.close();
+    #endif
     //normalize so integral below beams is 1.0
     //edit: normalization should be made as a post-processing step,
     //      just like a real experiment performs calibration of the

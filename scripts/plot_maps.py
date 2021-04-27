@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 
 pols = sys.argv[1]
 datapath = sys.argv[2]
-plotpath = os.path.basename(datapath).strip(".txt") + ".png"
+plotpath = os.path.basename(datapath) + ".png"
 plotpath = os.path.join(os.path.dirname(datapath), plotpath)
 
 I2, Q2, U2 = numpy.loadtxt(datapath, unpack=True)
@@ -77,5 +77,5 @@ plt.colorbar(imU2, ax=axes[1][2])
 
 fig.tight_layout()
 
-plt.show()
-#plt.savefig(plotpath)
+#plt.show()
+plt.savefig(plotpath)

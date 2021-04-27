@@ -73,8 +73,8 @@ libmapping_project_data_to_matrices
                     if(idx >= 0)
                     {
                         double d = data[det*nsamples + sample];
-                        double c2psi = cos(2*_psi);
-                        double s2psi = sin(2*_psi);
+                        double c2psi = cos(2.0*_psi);
+                        double s2psi = sin(2.0*_psi);
                         // update AtD
                         AtD[idx*3 + 0] += 1.0   * d;
                         AtD[idx*3 + 1] += c2psi * d;

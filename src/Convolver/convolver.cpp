@@ -52,12 +52,16 @@ void Convolver::exec_convolution(
     const double* dec_coords = scan->get_dec_ptr();
     const double* pa_coords  = scan->get_pa_ptr();
 
+    #ifdef CONVOLVER_DISABLECHI
+    std::cerr << "using chi = pa_bc!" << std::endl;
+    #endif
+
     // this is done so that OpenMP doesn't go bananas on calling the
     // function from Scan()
     long nsamples = scan->get_nsamples();
     // begin parallel region
     #ifdef CONVOLVER_OPENMPENABLED
-        #pragma omp parallel for
+    #pragma omp parallel for
     #endif
     for(long i = 0; i < nsamples; i++)
     {
@@ -114,10 +118,6 @@ void Convolver::beam_times_sky(
     fix_arr< double, 4 >   wgh;
     rangeset<int> intraBeamRanges;
 
-    #ifdef CONVOLVER_CHIASPABC
-    std::cerr < "using chi = pa_bc!" << std::endl;
-    #endif
-
     // find sky pixels around beam center, up to beam.rhoMax
     rmax = beam->get_rho_max();
     pointing sc(M_PI_2 - dec_bc, ra_bc);
@@ -133,7 +133,6 @@ void Convolver::beam_times_sky(
         for(skyPix = range_begin; skyPix < range_end; skyPix++)
         {
             // get pointing of sky pixel
-            std::cout << sc.theta << " " << sc.phi << " " << skyPix << std::endl;
             pointing sp = sky->hpxBase->pix2ang(skyPix);
             ra_pix = sp.phi;
             dec_pix = M_PI/2.0 - sp.theta;
@@ -145,11 +144,11 @@ void Convolver::beam_times_sky(
                 &rho, &sigma, &chi,
                 ra_bc , dec_bc, pa_bc,
                 ra_pix, dec_pix);
-            #ifdef CONVOLVER_CHIASPABC
+            #ifdef CONVOLVER_DISABLECHI
             chi = pa_bc;
             #endif
-            c2chi = cos(2*chi);
-            s2chi = sin(2*chi);
+            c2chi = cos(2.0*chi);
+            s2chi = sin(2.0*chi);
             // safety initializers
             std::memset(beam_a, 0.0, sizeof(double)*3);
             std::memset(beam_b, 0.0, sizeof(double)*3);
@@ -171,9 +170,11 @@ void Convolver::beam_times_sky(
                         beam_b[b] += double(beam->bBeams[b][ni])*ww;
                     }
                 }
-                std::cout << ws << std::endl;
-                beam_a[b] /= ws;
-                beam_b[b] /= ws;
+                if(ws > 0.0)
+                {
+                    beam_a[b] /= ws;
+                    beam_b[b] /= ws;
+                }
             }
             // data = beam x sky
             data_a = data_a
@@ -185,6 +186,15 @@ void Convolver::beam_times_sky(
               + sky->sI[skyPix]*(beam_b[0])
               + sky->sQ[skyPix]*(-beam_b[1]*c2chi + beam_b[2]*s2chi)
               + sky->sU[skyPix]*(-beam_b[2]*c2chi - beam_b[1]*s2chi);
+            
+            if ((ra_bc == M_PI) && (dec_bc == 0.0) && (sky->sI[skyPix] != 0.0))
+            {
+                printf("Pol    %lf %lf  %lf\n", sky->sI[skyPix], sky->sQ[skyPix], sky->sU[skyPix]);
+                printf("Angles %lf %lf \n", c2chi, s2chi);
+                printf("BeamA  %.9le %.9le %.9le \n", beam_a[0], beam_a[1], beam_a[2]);  
+                printf("BeamB  %.9le %.9le %.9le \n", beam_b[0], beam_b[1], beam_b[2]); 
+                printf("Data   %.9le %.9le \n", data_a, data_b);
+            } 
         }
     }
     (*da) = data_a;

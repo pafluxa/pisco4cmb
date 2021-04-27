@@ -63,6 +63,10 @@ if __name__ == "__main__":
     maxPix = healpy.ang2pix(nside, numpy.deg2rad(5.0), 0.0)
     pixels = numpy.arange(0, maxPix)
     theta, phi = healpy.pix2ang(nside, pixels)
+    # flip the sign of phi to account for GRASP using a differente
+    # coordinate system than PISCO to define the beams
+    phi = -phi
+    # build interpolation grid coordinates
     uh = numpy.sin(theta)*numpy.cos(phi)
     vh = numpy.sin(theta)*numpy.sin(phi)
     # make polarized beams as described in Rosset et al. 2010
@@ -99,7 +103,7 @@ if __name__ == "__main__":
     fig.tight_layout()
     plotname = 'polbeamplot_' + fnm
     plotpth = os.path.join(bpth, plotname)
-    plt.show()
+    #plt.show()
     #plt.savefig(plotpth)
 
     # build interpolators
@@ -117,7 +121,7 @@ if __name__ == "__main__":
     pltdata = numpy.zeros(12*nside**2)
     pltdata[0:len(tildeU)] = tildeU
     healpy.orthview(pltdata, rot=(0, 90, 0))
-    plt.show()
+    #plt.show()
     
     # setup output file
     newfnm = 'hpx_tilde_beams_' + fnm

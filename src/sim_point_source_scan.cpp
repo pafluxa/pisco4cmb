@@ -160,14 +160,21 @@ int main(int argc, char** argv )
     // setup detetctor angle arays
     int detectorMask[] = {0};
     double detectorAngle[1];
-    //double positionAngles[3] = {M_PI_4, 0, -M_PI_4};
-    double positionAngles[3] = {-M_PI_4, 0, M_PI_4};
+    //double positionAngles[3] = {-M_PI_2, -M_PI_4, 0.0};
+    // IN DEGREES!!
+    //double positionAngles[3] = {-45.0, 0.0, 45.0};
+    // Use CLASS boresight angles (IN DEGREES!!)
+    //double positionAngles[] = {-45.0, -30.0, -15.0, 0.0, 15.0, 30.0, 45.0};
+    // 22.5 degree scan
+    double positionAngles[] = {-90, -67.5, -45, -22.5, 0, 22.5, 45, 67.5, 90};
     std::cout << positionAngles[0] << " ";
     std::cout << positionAngles[1] << " ";
     std::cout << positionAngles[2] << " " << std::endl;
     // every PSB scans the sky 3 times at three different angles
-    for(double bcpa: positionAngles)
+    for(double bcpa_deg: positionAngles)
     {
+        // angles are in degrees. convert.
+        double bcpa = M_PI*(bcpa_deg/180.0);
         // zero-out data buffer
         std::memset(psbDataA, 0, sizeof(double)*NSAMPLES);
         std::memset(psbDataB, 0, sizeof(double)*NSAMPLES);
@@ -236,8 +243,8 @@ void init_point_source_scan(
 
     double ra_bc;
     double dec_bc;
-    double ndec = double(gridSizeRa);
-    double nra = double(gridSizeDec);
+    double ndec = double(gridSizeDec);
+    double nra = double(gridSizeRa);
     for(int i=0; i < gridSizeDec; i++) {
         dec_bc = dec0 - deltaDec + 2.0*deltaDec*(double(i)/ndec);
         for(int j=0; j < gridSizeRa; j++) {
@@ -294,8 +301,8 @@ void allocate_everything(void){
     // all pixels are mapped
     for(int i=0; i < NPIXELS_SKY; i++){ mapPixels[i] = i; }
 
-    psbDataA = (double*)malloc(sizeof(float)*NSAMPLES);
-    psbDataB = (double*)malloc(sizeof(float)*NSAMPLES);
+    psbDataA = (double*)malloc(sizeof(double)*NSAMPLES);
+    psbDataB = (double*)malloc(sizeof(double)*NSAMPLES);
 
 }
 
@@ -326,6 +333,10 @@ void load_beam_data(char polFlag, std::string path, PolBeam& beam) {
 
     int i = 0;
     std::ifstream detBeams(path);
+    if(!detBeams.is_open()){
+        std::cout << "File not found" << std::endl;
+        throw std::invalid_argument("cannot open beam data files.");
+    }
     std::string line;
     while(std::getline(detBeams, line) && i < NPIXELS_BEAM) {
         std::istringstream iss(line);
