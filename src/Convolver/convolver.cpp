@@ -14,34 +14,10 @@ Convolver::Convolver(
     scan = _scan;
     sky = _sky;
     beam = _beam;
-    // get active number of threads
-    //nthreads = omp_get_num_threads();
-    //nsamples = _nsamples;
-    /*
-    int chunkSize = nsamples/nthreads;
-    int it = 0;
-    int s = 0;
-    int e = chunkSize;
-    while(it < nthreads - 1)
-    {
-        bufferStart.push_back(s);
-        bufferEnd.push_back(e);
-        s += chunkSize;
-        e += chunkSize;
-        it += 1;
-    }
-    chunkSize = nsamples - nthreads*chunkSize;
-    s += chunkSize;
-    e += chunkSize;
-    bufferStart.push_back(s);
-    bufferEnd.push_back(e);
-    */
 }
 
 Convolver::~Convolver()
 {
-    //bufferStart.clear();
-    //bufferEnd.clear();
 }
 
 void Convolver::exec_convolution(
@@ -132,11 +108,12 @@ void Convolver::beam_times_sky(
         range_end   = intraBeamRanges.ivend(rn);
         for(skyPix = range_begin; skyPix < range_end; skyPix++)
         {
+            if(sky->sI[skyPix] > 0 )
+            {
             // get pointing of sky pixel
             pointing sp = sky->hpxBase->pix2ang(skyPix);
             ra_pix = sp.phi;
             dec_pix = M_PI/2.0 - sp.theta;
-
             // safety initializers
             rho=0.0; sigma=0.0; chi=0.0;
             // compute rho sigma and chi at beam pixel
@@ -176,7 +153,6 @@ void Convolver::beam_times_sky(
                     beam_b[b] /= ws;
                 }
             }
-            // data = beam x sky
             data_a = data_a
               + sky->sI[skyPix]*(beam_a[0])
               + sky->sQ[skyPix]*(beam_a[1]*c2chi - beam_a[2]*s2chi)
@@ -186,15 +162,22 @@ void Convolver::beam_times_sky(
               + sky->sI[skyPix]*(beam_b[0])
               + sky->sQ[skyPix]*(-beam_b[1]*c2chi + beam_b[2]*s2chi)
               + sky->sU[skyPix]*(-beam_b[2]*c2chi - beam_b[1]*s2chi);
-            
-            if ((ra_bc == M_PI) && (dec_bc == 0.0) && (sky->sI[skyPix] != 0.0))
+
+            #ifdef CONVOLVER_DEBUG
+            if((abs(ra_bc - M_PI + 0.3 / 32.0) < 1.0e-4) && (abs(dec_bc - 0.3 / 32.0) < 1.0e-4) && (sky->sI[skyPix] != 0.0)) 
             {
                 printf("Pol    %lf %lf  %lf\n", sky->sI[skyPix], sky->sQ[skyPix], sky->sU[skyPix]);
                 printf("Angles %lf %lf \n", c2chi, s2chi);
+                double degr = 180.0 / M_PI;
+                printf("ra_bc %lf dec_bc %lf ra_pix %lf dec_pix %lf \n", ra_bc * degr, dec_bc * degr, ra_pix* degr, dec_pix* degr);
+                printf("rho %lf sigma %lf \n", rho * degr, sigma * degr);
                 printf("BeamA  %.9le %.9le %.9le \n", beam_a[0], beam_a[1], beam_a[2]);  
                 printf("BeamB  %.9le %.9le %.9le \n", beam_b[0], beam_b[1], beam_b[2]); 
-                printf("Data   %.9le %.9le \n", data_a, data_b);
-            } 
+                printf("Data   %.9le %.9le \n\n", data_a, data_b);
+            }
+            #endif
+            
+            }
         }
     }
     (*da) = data_a;
