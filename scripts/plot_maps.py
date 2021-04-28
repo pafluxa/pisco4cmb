@@ -4,15 +4,24 @@ import healpy
 import numpy
 import matplotlib.pyplot as plt
 
+nside = 512
+npix = 12*nside*nside
 pols = sys.argv[1]
 datapath = sys.argv[2]
 plotpath = os.path.basename(datapath) + ".png"
 plotpath = os.path.join(os.path.dirname(datapath), plotpath)
+nzpixels, Idata, Qdata, Udata = numpy.loadtxt(datapath, unpack=True)
+nzpixels = nzpixels.astype('int32')
+I2 = numpy.zeros(npix)
+Q2 = numpy.zeros(npix)
+U2 = numpy.zeros(npix)
+I2[nzpixels] = Idata
+Q2[nzpixels] = Qdata
+U2[nzpixels] = Udata
 
-I2, Q2, U2 = numpy.loadtxt(datapath, unpack=True)
-I1 = numpy.zeros_like(I2)
-Q1 = numpy.zeros_like(I2)
-U1 = numpy.zeros_like(I2)
+I1 = numpy.zeros(npix)
+Q1 = numpy.zeros(npix)
+U1 = numpy.zeros(npix)
 
 I1[numpy.argmax(I2)] = 1.0
 if pols == 'Q':
