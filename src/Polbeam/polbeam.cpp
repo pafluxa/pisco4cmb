@@ -11,55 +11,6 @@
 #include <fstream>
 #endif
 
-bool normalize_by_sum(float v[], int N)
-{
-    double sum = 0.0;
-    for(int i = 0; i < N; i++)
-    {
-        sum += double(v[i]);
-    }
-    if(abs(sum) < 1e-18)
-    {
-        std::cerr << "WARNING: norm of vector is very small." << std::endl;
-        return false;
-    }
-    for(int i = 0; i < N; i++)
-    {
-        v[i] = v[i]/sum;
-    }
-
-    return true;
-}
-
-std::complex<double> complex_2ddot(
-    std::complex<double> w[2],
-    std::complex<double> z[2])
-/*
- * computes the dot product of vectors w and z, where w = (w_x, w_y) and
- * z = (z_x, z_y) are vectors with complex components (w_x for instance,
- * is a complex number). Note the dot product of two complex vectors is
- * actually a complex number!
- *
- */
-{
-    std::complex<double> dp;
-    dp = z[0]*std::conj(w[0]) + z[1]*std::conj(w[1]);
-
-    return dp;
-}
-
-
-double complex_2dnorm(std::complex<double> w[2])
-/*
- * computes the norm of a vector (w,z). w and z are complex numbers.
- */
-{
-    double norm;
-    norm = std::real(complex_2ddot(w, w));
-
-    return norm;
-}
-
 PolBeam::PolBeam(int _nside, long _nPixels)
 {
     nside = _nside;
@@ -193,10 +144,8 @@ PolBeam::beam_from_fields
         Q[i] = std::norm(Eco) - std::norm(Ecx);
         // compute \tilde{U}
         U[i] = 2*std::real(Eco*std::conj(Ecx));
-        // TODO: add V, possibly equals to this
-        // 2*std::real(-Eco*std::conj(Ecx) - std::conj(Eco)*Ecx)
-        // but it shall stay 0 until I figure it out properly
-        V[i] = 0;
+        // compute \tilde{V}
+        V[i] = -2*std::imag(Eco*std::conj(Ecx));
     }
 }
 
@@ -219,56 +168,36 @@ void PolBeam::build_beams(void)
         aBeams[2][i] = Ua[i] - epsilon*Ub[i];
         aBeams[3][i] = Ua[i] - epsilon*Ub[i];
         aBeams[4][i] = Qa[i] - epsilon*Qb[i];
-        aBeams[5][i] = 0;//(Va[i] + epsilon*Vb[i]);
-
+        aBeams[5][i] = Va[i] + epsilon*Vb[i];
         #ifdef POLBEAM_DUMPBEAMS
         dumpfilea 
                  << aBeams[0][i] << " "
                  << aBeams[1][i] << " "
                  << aBeams[2][i] << " "
                  << aBeams[3][i] << " "
-                 << aBeams[4][i] << std::endl;
+                 << aBeams[4][i] << " "
+                 << aBeams[5][i] << std::endl;
         #endif
-
         bBeams[0][i] = Ib[i] + epsilon*Ia[i];
         bBeams[1][i] = Qb[i] - epsilon*Qa[i];
         bBeams[2][i] = Ub[i] - epsilon*Ua[i];
         bBeams[3][i] = Ub[i] - epsilon*Ua[i];
         bBeams[4][i] = Qb[i] - epsilon*Qa[i];
-
-        bBeams[5][i] = 0;//(Vb[i] + epsilon*Va[i]);
+        bBeams[5][i] = Vb[i] + epsilon*Va[i];
         #ifdef POLBEAM_DUMPBEAMS
         dumpfileb 
                  << bBeams[0][i] << " "
                  << bBeams[1][i] << " "
                  << bBeams[2][i] << " "
                  << bBeams[3][i] << " "
-                 << bBeams[4][i] << std::endl;
+                 << bBeams[4][i] << " "
+                 << bBeams[5][i] << std::endl;
         #endif
     }
     #ifdef POLBEAM_DUMPBEAMS
     dumpfilea.close();
     dumpfileb.close();
     #endif
-    //normalize so integral below beams is 1.0
-    //edit: normalization should be made as a post-processing step,
-    //      just like a real experiment performs calibration of the
-    //      the timestreams after they are acquired.
-    /*
-    for(int i = 0; i < 6; i++)
-    {
-        if(!normalize_by_sum(aBeams[i], nPixels))
-        {
-            std::cerr << "WARNING: A-beam idx " << i << " is zero"
-                      << std::endl;
-        }
-        if(!normalize_by_sum(bBeams[i], nPixels))
-        {
-            std::cerr << "WARNING: B-beam idx " << i << " is zero"
-                      << std::endl;
-        }
-    }
-    */
 }
 
 void PolBeam::make_unpol_gaussian_elliptical_beams(
