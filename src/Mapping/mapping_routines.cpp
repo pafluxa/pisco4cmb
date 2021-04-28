@@ -5,15 +5,6 @@
 #include <chealpix.h>
 #include <omp.h>
 
-/** Disabling mask support
-#include "Mapping/healpix_map.h"
-**/
-
-// why is this here?
-//#ifndef M_PI_2
-//#define M_PI_2 (1.5707963267948966)
-//#endif
-
 extern "C" {
      void dgesv_(int *n, int *nrhs,  double *a,  int  *lda,
            int *ipivot, double *b, int *ldb, int *info) ;
@@ -33,25 +24,18 @@ libmapping_project_data_to_matrices
     double AtA[], double AtD[]
 )
 {
-    /** Disabling mask support
-     * 
-    healpixMap *mask;
-    mask = healpixMap_new();
-    healpixMap_allocate(map_nside, mask);
-    healpixMap_set_mask(mask, pixels_in_the_map, map_size);
-    **/
+    long pix;
+    #ifdef MAPPING_DEBUG
     // compute central pixel (dec=0, ra=PI)
     long CENTER_INDEX;
-    ang2pix_ring(map_nside, M_PI_2, M_PI, &CENTER_INDEX);
-    /** disabling mask support
-    CENTER_INDEX = healpixMap_pix2idx(mask, CENTER_INDEX);
-    **/
+    ang2pix_ring(map_nside, 
+        M_PI_2 - 0.3 / 32.0, M_PI - 0.3 / 32.0, &CENTER_INDEX);
+    #endif
     for(int det=0; det < ndets; det++)
     {
         if(dets_to_map[det] == 0)
         {
             double pol_angle = pol_angles[det];
-
             for(int sample=0; sample < nsamples; sample++)
             {
                 if(bad_data_samples[det*nsamples + sample] == 0)
@@ -62,33 +46,26 @@ libmapping_project_data_to_matrices
                     // Passed arguments are counterclockwise on the sky
                     // CMB requires clockwise
                     _psi   = -(pol_angle + pa[det*nsamples + sample]);
-                    long pix;
                     ang2pix_ring(map_nside, _theta, _phi, &pix);
-                    /** disabling mask support
-                    // Transform pixel number to array index using the mask.
-                    // Only project if the pixel is actually in the map.
-                    //long idx = healpixMap_pix2idx(mask, pix);
-                    **/
-                    long idx = pix;
-                    if(idx >= 0)
+                    if(pix >= 0)
                     {
                         double d = data[det*nsamples + sample];
                         double c2psi = cos(2.0*_psi);
                         double s2psi = sin(2.0*_psi);
                         // update AtD
-                        AtD[idx*3 + 0] += 1.0   * d;
-                        AtD[idx*3 + 1] += c2psi * d;
-                        AtD[idx*3 + 2] += s2psi * d;
+                        AtD[pix*3 + 0] += 1.0   * d;
+                        AtD[pix*3 + 1] += c2psi * d;
+                        AtD[pix*3 + 2] += s2psi * d;
                          // update matrix
-                        AtA[idx*9 + 0] += 1.0;
-                        AtA[idx*9 + 1] += c2psi;
-                        AtA[idx*9 + 2] += s2psi;
-                        AtA[idx*9 + 3] += c2psi;
-                        AtA[idx*9 + 4] += c2psi*c2psi;
-                        AtA[idx*9 + 5] += c2psi*s2psi;
-                        AtA[idx*9 + 6] += s2psi;
-                        AtA[idx*9 + 7] += c2psi*s2psi;
-                        AtA[idx*9 + 8] += s2psi*s2psi;
+                        AtA[pix*9 + 0] += 1.0;
+                        AtA[pix*9 + 1] += c2psi;
+                        AtA[pix*9 + 2] += s2psi;
+                        AtA[pix*9 + 3] += c2psi;
+                        AtA[pix*9 + 4] += c2psi*c2psi;
+                        AtA[pix*9 + 5] += c2psi*s2psi;
+                        AtA[pix*9 + 6] += s2psi;
+                        AtA[pix*9 + 7] += c2psi*s2psi;
+                        AtA[pix*9 + 8] += s2psi*s2psi;
                     }
 
                 }
@@ -97,12 +74,18 @@ libmapping_project_data_to_matrices
         }
 
     }
-
+    #ifdef MAPPING_DEBUG
     int idx = int(CENTER_INDEX);
+    double ra_pix, dec_pix; 
+    double degr = 180.0 / M_PI;
+    pix2ang_ring(map_nside, idx, &dec_pix, &ra_pix);
+    dec_pix = M_PI_2 - dec_pix;
+    printf("ra_pix %lf dec_pix %lf \n", ra_pix * degr, dec_pix * degr);
     printf("AtD: %le %le %le \n"  , AtD[idx*3 + 0], AtD[idx*3 + 1], AtD[idx*3 + 2]);
     printf("AtA: %le %le %le \n"  , AtA[idx*9 + 0], AtA[idx*9 + 1], AtA[idx*9 + 2]);
     printf("     %le %le %le \n"  , AtA[idx*9 + 3], AtA[idx*9 + 4], AtA[idx*9 + 5]);
     printf("     %le %le %le \n\n", AtA[idx*9 + 6], AtA[idx*9 + 7], AtA[idx*9 + 8]);
+    #endif
 }
 
 void
@@ -115,20 +98,14 @@ libmapping_get_IQU_from_matrices
     float I[], float Q[], float U[], float W[]
 )
 {
-    /** Disabling mask support
-     * 
-    healpixMap *mask;
-    mask = healpixMap_new();
-    healpixMap_allocate(map_nside, mask);
-    healpixMap_set_mask(mask, pixels_in_the_map, map_size);
-    **/
+    long index;
+    #ifdef MAPPING_DEBUG
     // compute central pixel (dec=0, ra=PI)
     long CENTER_INDEX;
-    ang2pix_ring(map_nside, M_PI_2, M_PI, &CENTER_INDEX);
-    /** Disabling mask support
-    CENTER_INDEX = healpixMap_pix2idx(mask, CENTER_INDEX);
-    **/
-    for(long index = 0; index < map_size; index++)
+    ang2pix_ring(map_nside, 
+        M_PI_2 - 0.3 / 32.0, M_PI - 0.3 / 32.0, &CENTER_INDEX);
+    #endif
+    for(index = 0; index < map_size; index++)
     {
         int n = 3;
         int nrhs = 1;
@@ -188,13 +165,14 @@ libmapping_get_IQU_from_matrices
                 qq = AtD_pix[0][1];
                 uu = AtD_pix[0][2];
             }
-            //if(map_pixel == CENTER_INDEX) printf("I Q U: %le %le %le \n", ii, qq, uu);
         }
         I[map_pixel] += ii;
         Q[map_pixel] += qq;
         U[map_pixel] += uu;
         W[map_pixel] += hits;
     }
+    #ifdef MAPPING_DEBUG
     int idx = int(CENTER_INDEX);
     printf("I Q U: %le %le %le \n", I[idx], Q[idx], U[idx]);
+    #endif
 }
