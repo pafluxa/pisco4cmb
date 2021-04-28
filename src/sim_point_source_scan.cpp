@@ -3,7 +3,7 @@
  * a point source, beams for a PSB and other parameters relative to
  * map resolution and input/output to produce another map with the
  * result of the PSB "raster scanning" that point source at three
- * different position angles (-pi/4, 0, and pi/4).
+ * different position angles.
  *
  */
 #include <cstdlib>
@@ -24,9 +24,9 @@
 #include <healpix_base.h>
 #include <pointing.h>
 
-#define NSIDE_SKY (256)
+#define NSIDE_SKY (512)
 #define NPIXELS_SKY (12*(NSIDE_SKY)*(NSIDE_SKY))
-#define NSAMPLES_GRID 128
+#define NSAMPLES_GRID 256
 #define NSAMPLES (NSAMPLES_GRID*NSAMPLES_GRID)
 #define NSIDE_BEAM 2048
 /** how to calculate the number of pixels below
@@ -93,8 +93,8 @@ int main(int argc, char** argv )
     float pQ = 0.0;
     float pU = 0.0;
     bool beamsFromGauss = true;
-    double bfwhmx = 0;
-    double bfwhmy = 0;
+    double bfwhmx = 0.0;
+    double bfwhmy = 0.0;
     std::string beamAPath;
     std::string beamBPath;
     int opt;
@@ -160,21 +160,17 @@ int main(int argc, char** argv )
     // setup detetctor angle arays
     int detectorMask[] = {0};
     double detectorAngle[1];
-    //double positionAngles[3] = {-M_PI_2, -M_PI_4, 0.0};
-    // IN DEGREES!!
-    //double positionAngles[3] = {-45.0, 0.0, 45.0};
-    // Use CLASS boresight angles (IN DEGREES!!)
-    //double positionAngles[] = {-45.0, -30.0, -15.0, 0.0, 15.0, 30.0, 45.0};
-    // 22.5 degree scan
-    double positionAngles[] = {-90, -67.5, -45, -22.5, 0, 22.5, 45, 67.5, 90};
+    double positionAngles[] = {-90, -45, 0, 45, 90};
     std::cout << positionAngles[0] << " ";
     std::cout << positionAngles[1] << " ";
-    std::cout << positionAngles[2] << " " << std::endl;
+    std::cout << positionAngles[2] << " ";
+    std::cout << positionAngles[3] << " ";
+    std::cout << positionAngles[4] << " " << std::endl;
     // every PSB scans the sky 3 times at three different angles
     for(double bcpa_deg: positionAngles)
     {
         // angles are in degrees. convert.
-        double bcpa = M_PI*(bcpa_deg/180.0);
+        double bcpa = M_PI*(bcpa_deg / 180.0);
         // zero-out data buffer
         std::memset(psbDataA, 0, sizeof(double)*NSAMPLES);
         std::memset(psbDataB, 0, sizeof(double)*NSAMPLES);
@@ -225,9 +221,12 @@ int main(int argc, char** argv )
     );
     for(int i=0; i<NPIXELS_SKY; i++)
     {
-        outdata << skyI[i] << " " <<
-                   skyQ[i] << " " <<
-                   skyU[i] << std::endl;
+        if(skyI[i] > 0 || skyQ[i] > 0 || skyU[i] > 0 || skyV[i] > 0) {
+            outdata << i       << " " <<
+                       skyI[i] << " " <<
+                       skyQ[i] << " " <<
+                       skyU[i] << std::endl;
+        }
     }
     outdata.close();
     free_everything();
@@ -329,8 +328,8 @@ void free_everything(void) {
     std::cerr << "data buffers freed" << std::endl;
 }
 
+// this function is more robust in the case the wrong file is used
 void load_beam_data(char polFlag, std::string path, PolBeam& beam) {
-
     int i = 0;
     std::ifstream detBeams(path);
     if(!detBeams.is_open()){
@@ -340,7 +339,7 @@ void load_beam_data(char polFlag, std::string path, PolBeam& beam) {
     std::string line;
     while(std::getline(detBeams, line) && i < NPIXELS_BEAM) {
         std::istringstream iss(line);
-        // stop if an error while parsing ocurrs
+        // stop if an error while parsing occurs
         if(polFlag == 'a') {
             if(!(iss
                  >> beam.Ia[i]
@@ -348,7 +347,7 @@ void load_beam_data(char polFlag, std::string path, PolBeam& beam) {
                  >> beam.Ua[i]
                  >> beam.Va[i]))
             {
-                break;
+                throw std::length_error("not enough data.");
             }
         }
         else if(polFlag == 'b') {
@@ -358,7 +357,7 @@ void load_beam_data(char polFlag, std::string path, PolBeam& beam) {
                  >> beam.Ub[i]
                  >> beam.Vb[i]))
             {
-                break;
+                throw std::length_error("not enough data.");
             }
         }
         else {
