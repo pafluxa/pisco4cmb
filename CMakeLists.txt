@@ -50,9 +50,7 @@ add_library(pisco SHARED
     src/Bpoint/bpoint.cpp
     src/Bpoint/ElapsedTime.cpp
     src/Bpoint/jpl_eph.cpp
-    src/Mapping/healpix_map.cpp
     src/Mapping/mapping_routines.cpp
-    src/Mapping/chealpix_interpolate.cpp
     src/Polbeam/polbeam.cpp
     src/Sphtrigo/sphtrigo.cpp
     src/Convolver/convolver.cpp
