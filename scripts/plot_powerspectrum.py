@@ -1,30 +1,48 @@
+import sys
 import healpy
 import numpy
 import matplotlib.pyplot as plt
 
-I1, Q1, U1, V1 = numpy.loadtxt('maps_input.txt', unpack=True)
+I1, Q1, U1, V1 = numpy.loadtxt(sys.argv[1], unpack=True)
+I2, Q2, U2, V2 = numpy.loadtxt(sys.argv[2], unpack=True)
+beamNside = int(sys.argv[3])
+tI, tQ, tU, tV = beamData = numpy.loadtxt(sys.argv[4], unpack=True)
 
-I2, Q2, U2 = numpy.loadtxt('maps_output.txt', unpack=True)
-# manual normalization by beam solid angle
-I2 = 0.5*I2/(778.241*1e-6)**0.5
-Q2 = 0.5*Q2/(778.241*1e-6)**0.5
-U2 = 0.5*U2/(778.241*1e-6)**0.5
+# compute solid angle of beam
+gain = numpy.max(tI)
+tI = tI/gain
+sa = numpy.sum(tI) * 4 * numpy.pi/(12*beamNside**2)
+print("beam solid angle is {:2.2f} ustrad".format(sa*1e6))
 
-cells = numpy.loadtxt('./data/cls/lcdm_cls_r=0.1000.dat')
+cells = numpy.loadtxt('./data/cls/lcdm_cls_r=0.0100.dat')
 TTRef = cells[1]
 EERef = cells[2]
 BBRef = cells[3]
 BBlmax = len(BBRef)
+# window function
+nsidemap = healpy.npix2nside(len(I2))
+wfuncs = healpy.gauss_beam(numpy.deg2rad(1.50), lmax=2048, pol=True)
+pfunT, pfunP = healpy.pixwin(nsidemap, pol=True, lmax=2048)
+print(pfunT)
 
-Is, Qs, Us = healpy.smoothing((I1, Q1, U1), fwhm=numpy.deg2rad(1.1), pol=True)
+# normalize by solid angle
+I2 *= (nsidemap / 2048) * (sa)**0.5 / gain
+Q2 *= (nsidemap / 2048) * (sa)**0.5 / gain
+U2 *= (nsidemap / 2048) * (sa)**0.5 / gain
+                     
 
-print(numpy.sum(I2)/numpy.sum(Is))
-print(numpy.sum(Q2)/numpy.sum(Qs))
-print(numpy.sum(U2)/numpy.sum(Us))
-
-TT1, EE1, BB1, TE1, EB1, TB1 = healpy.anafast((Is, Qs, Us), pol=True)
+TT1, EE1, BB1, TE1, EB1, TB1 = healpy.anafast((I1, Q1, U1), pol=True)
 TT2, EE2, BB2, TE2, EB2, TB2 = healpy.anafast((I2, Q2, U2), pol=True)
-ell = numpy.arange(len(TT1))
+ell = numpy.arange(len(TT1)) + 2
+# correct PISCO power spectra using the window function of a circular
+# gaussian beam of FWHM = 1.1 deg
+wfuncs = wfuncs[0:len(TT1), ]
+pfunT = pfunT[0:len(TT1), ]
+pfunP = pfunP[0:len(TT1), ]
+
+TT2 *= (1./(wfuncs[:, 0])**2 * 1/pfunT)
+EE2 *= (1./(wfuncs[:, 1])**2 * 1/pfunP)
+BB2 *= (1./(wfuncs[:, 2])**2 * 1/pfunP)
 
 fig, axes = plt.subplots(1, 3, \
     sharex=True, figsize=(9, 5.7/2.0))
@@ -68,3 +86,4 @@ for idx, ax in enumerate(axes):
 
 plt.tight_layout()
 plt.show()
+#plt.savefig("ps.png")

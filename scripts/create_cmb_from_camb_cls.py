@@ -48,5 +48,4 @@ pylab.show()
 '''
 #numpy.save( './data/maps/cmb/lcdm_r=%1.3f_0000_nside=%d.npz' % (r_value,out_nside), I=I, Q=Q, U=U, V=V, nside=out_nside )
 data = numpy.vstack([I, Q, U, V])
-print(data.shape)
-numpy.savetxt( 'maps_input.txt', data.T)
+numpy.savetxt( 'cmb.txt', data.T)
