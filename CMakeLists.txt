@@ -42,6 +42,18 @@ endif()
 if(CONVOLVER_OPENMPENABLED)
   add_definitions(-DCONVOLVER_OPENMPENABLED)
 endif()
+# flag to enable debug print statements in mapping
+if(MAPPING_DEBUG)
+  add_definitions(-DMAPPING_DEBUG)
+endif()
+
+if(CONVOLVER_DEBUG)
+  add_definitions(-DCONVOLVER_DEBUG)
+endif()
+
+if(POLBEAM_DUMPBEAMS)
+  add_definitions(-DPOLBEAM_DUMPBEAMS)
+endif()
 
 # library
 add_library(pisco SHARED
@@ -63,7 +75,7 @@ target_include_directories(pisco PUBLIC
     ${CHEALPIX_INCLUDE_DIR}
     ${CFITSIO_INCLUDE_DIR}
 )
-# executable
+# executable to simulate point source convolution
 add_executable(simulate_point_source_scan.x
     src/sim_point_source_scan.cpp
 )
@@ -71,6 +83,22 @@ target_include_directories(simulate_point_source_scan.x PRIVATE
     src/
 )
 target_link_libraries(simulate_point_source_scan.x PRIVATE
+    pisco
+    ${SOFA_LIBRARIES}
+    ${OpenMP_LIBRARIES}
+    ${LAPACK_LIBRARIES}
+    ${CHEALPIX_LIBRARIES}
+    ${HEALPIX_LIBRARIES}
+    ${CFITSIO_LIBRARIES}
+)
+# executable to simulate whole sky simulation
+add_executable(simulate_wholesky_scan.x
+    src/sim_wholesky_scan.cpp
+)
+target_include_directories(simulate_wholesky_scan.x PRIVATE
+    src/
+)
+target_link_libraries(simulate_wholesky_scan.x PRIVATE
     pisco
     ${SOFA_LIBRARIES}
     ${OpenMP_LIBRARIES}
