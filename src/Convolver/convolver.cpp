@@ -108,8 +108,6 @@ void Convolver::beam_times_sky(
         range_end   = intraBeamRanges.ivend(rn);
         for(skyPix = range_begin; skyPix < range_end; skyPix++)
         {
-            if(sky->sI[skyPix] > 0 )
-            {
             // get pointing of sky pixel
             pointing sp = sky->hpxBase->pix2ang(skyPix);
             ra_pix = sp.phi;
@@ -175,9 +173,7 @@ void Convolver::beam_times_sky(
                 printf("BeamB  %.9le %.9le %.9le \n", beam_b[0], beam_b[1], beam_b[2]); 
                 printf("Data   %.9le %.9le \n\n", data_a, data_b);
             }
-            #endif
-            
-            }
+            #endif            
         }
     }
     (*da) = data_a;
