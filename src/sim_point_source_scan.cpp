@@ -160,7 +160,7 @@ int main(int argc, char** argv )
     // setup detetctor angle arays
     int detectorMask[] = {0};
     double detectorAngle[1];
-    double positionAngles[] = {-90, -45, 0, 45, 90};
+    double positionAngles[] = {-90, -67.5, -45, -22.5, 0, 22.5, 45, 67.5, 90};
     std::cout << positionAngles[0] << " ";
     std::cout << positionAngles[1] << " ";
     std::cout << positionAngles[2] << " ";
