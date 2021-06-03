@@ -95,16 +95,6 @@ kernel_beam_times_sky
             #endif
             /* Get sky coordinates of the evaluation pixel. */
             cudaHealpix::pix2ang(skynside, sp, &decsp, &rasp);
-            /*
-            if(threadIdx.x == 0 )
-            {
-                printf("sky pixel = %d\n", sp);
-                printf("sky nside = %d\n", skynside);
-                printf("sky value = %f\n", I);
-                printf("tht pix = %2.8lf\n", decsp);
-                printf("phi pix = %2.8lf\n", rasp);
-            }
-            */
             decsp = M_PI_2 - decsp;
             /* Compute rho sigma and chi at beam pixel. */
             cudaSphericalTransformations::rho_sigma_chi_pix(
