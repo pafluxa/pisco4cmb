@@ -5,15 +5,6 @@
 #include "GpuConvolver/cuda/beam_times_sky.h"
 #include "GpuConvolver/cuda/cuda_error_check.h"
 
-#define N_POINTING_COORDS 4
-#define N_SKY_COMP 4
-#define N_POLBEAMS 4
-
-#ifdef CUDACONV_SKYASTEXTURE
-// Texture reference for 1D float4 texture
-texture<float4, 1, cudaReadModeElementType> tex_skyGPU;
-#endif
-
 GPUConvolver::GPUConvolver(Scan& scan, CUDACONV::RunConfig cfg)
 {
     nsamples = scan.get_nsamples();
@@ -130,13 +121,6 @@ void GPUConvolver::update_sky(Sky* sky)
             skyBufferSize,
             cudaMemcpyHostToDevice)
     );
-    #ifdef CUDACONV_SKYASTEXTURE
-    // Bind Texture
-    CUDA_ERROR_CHECK
-    (
-        cudaBindTexture(0, tex_skyGPU, skyGPU, skyBufferSize)
-    );
-    #endif
     free(skyTransponsed);
 }
 
