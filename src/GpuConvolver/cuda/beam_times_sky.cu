@@ -3,22 +3,12 @@
 #include "sphtrigo.h"
 #include "healpix_utils.h"
 
-#define THREADS_PER_BLOCK 32
-#if __CUDA_ARCH__ >= 200
-    #define MY_KERNEL_MAX_THREADS  (2 * THREADS_PER_BLOCK)
-    #define MY_KERNEL_MIN_BLOCKS   3
-#else
-    #define MY_KERNEL_MAX_THREADS  THREADS_PER_BLOCK
-    #define MY_KERNEL_MIN_BLOCKS   2
-#endif
-
 #ifdef CUDACONV_SKYASTEXTURE
 // Texture reference for 1D float4 texture
 texture<float4, 1, cudaReadModeElementType> tex_skyGPU;
 #endif
 
 __global__ void
-__launch_bounds__(MY_KERNEL_MAX_THREADS, MY_KERNEL_MIN_BLOCKS)
 kernel_beam_times_sky
 (
     int threadsPerBlock,
