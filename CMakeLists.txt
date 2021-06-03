@@ -5,18 +5,16 @@ set(CMAKE_MODULE_PATH
     "${CMAKE_SOURCE_DIR}/cmake_modules/")
 set(CMAKE_DISABLE_IN_SOURCE_BUILD ON)
 set(CMAKE_DISABLE_SOURCE_CHANGES ON)
-
-project(pixconv
+project(pisco
         LANGUAGES CXX CUDA
-        VERSION 0.1
+        VERSION 0.2
         DESCRIPTION "Compiles PIxel Space COnvolution library.")
-
 # enable compilation using standard C++11
 set(CMAKE_CXX_STANDARD 11)
-
+# debug flags
 set(CMAKE_CFLAGS_DEBUG "-g -G -Wall -O0")
 set(CMAKE_CXXFLAGS_DEBUG "-g -G -Wall -O0")
-
+# directives to find required packages
 find_package(OpenMP REQUIRED)
 find_package(Healpix REQUIRED)
 find_package(CHealpix REQUIRED)
@@ -25,11 +23,10 @@ find_package(LAPACK REQUIRED)
 #find_package(cnpy REQUIRED)
 find_package(Sofa REQUIRED)
 find_package(cfitsio REQUIRED)
-
 # it seems like CMAKE can't find openmp on its own
 # compile with -O2 seems to be a good compromise
-SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native -fopenmp -pthread -O2")
-
+SET(CMAKE_CXX_FLAGS 
+  "${CMAKE_CXX_FLAGS} -march=native -fopenmp -pthread -O2")
 # flag to disable correct polarization angle calculation
 if(CONVOLVER_DISABLECHI)
   add_definitions(-DCONVOLVER_DISABLECHI)
@@ -46,22 +43,31 @@ endif()
 if(MAPPING_DEBUG)
   add_definitions(-DMAPPING_DEBUG)
 endif()
-
+# flag to enable debug print statements in convovler
 if(CONVOLVER_DEBUG)
   add_definitions(-DCONVOLVER_DEBUG)
 endif()
-
+# flag to enable dumping beams to text files
 if(POLBEAM_DUMPBEAMS)
   add_definitions(-DPOLBEAM_DUMPBEAMS)
 endif()
-
-#enable CUDA support
+# enable gpu to compute the beam/sky convolution
 if(USE_CUDA)
   find_package(CUDA REQUIRED)
   set(CUDA_SEPARABLE_COMPILATION ON)
 endif()
+# enable beam interpolation when calculating the convolution
+# roughly doubles the time taken by the gpu routine!
+if(CUDACONV_USE_INTERPOLATION)
+  add_definitions(-DCUDACONV_USE_INTERPOLATION)
+endif()
+# use GPU texture memory to store the sky map
+# speed up things in some cases.
+if(CUDACONV_SKYASTEXTURE)
+  add_definitions(-DCUDACONV_SKYASTEXTURE)
+endif()
 
-# main library
+# compile main library
 if(USE_CUDA)
     cuda_add_library(pisco STATIC
         src/Sky/sky.cpp
@@ -77,7 +83,6 @@ if(USE_CUDA)
         src/GpuConvolver/cuda/beam_times_sky.cu
         src/GpuConvolver/cuda/sphtrigo.cu
         src/GpuConvolver/cuda/healpix_utils.cu)
-        
     target_include_directories(pisco PRIVATE
         src/GpuConvolver/cuda)
 else()
@@ -100,9 +105,8 @@ target_include_directories(pisco PUBLIC
     ${HEALPIX_INCLUDE_DIR}
     ${CHEALPIX_INCLUDE_DIR}
     ${CFITSIO_INCLUDE_DIR})
-# whole sky simulation executable
+# compile wholesky simulation executable
 if(USE_CUDA)
-  # executable to simulate whole sky simulation
   cuda_add_executable(gpu_simulate_wholesky_scan.x 
     src/cuda_sim_wholesky_scan.cpp)
   target_include_directories(gpu_simulate_wholesky_scan.x 
@@ -117,8 +121,6 @@ if(USE_CUDA)
     ${HEALPIX_LIBRARIES}
     ${CFITSIO_LIBRARIES})
 else()
-  # executable to simulate whole sky simulation
-  add_executable(simulate_wholesky_scan.x src/sim_wholesky_scan.cpp)
   target_include_directories(simulate_wholesky_scan.x PRIVATE src/)
   target_link_libraries(
     simulate_wholesky_scan.x 
