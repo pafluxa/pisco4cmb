@@ -5,26 +5,54 @@
 #ifndef _GPUCONVOLVERH
 #define _GPUCONVOLVERH
 
+#include <cuda.h>
+#include <cuda_runtime.h>
+
 #include "Sky/sky.hpp"
 #include "Scan/scan.hpp"
 #include "Polbeam/polbeam.hpp"
-#include "GpuConvolver/cuda/beam_times_sky.h"
+
+#define N_POINTING_COORDS 4
+#define N_SKY_COMP 4
+#define N_POLBEAMS 4
+
+//#define CUDACONV_SKYASTEXTURE
+
+namespace CUDACONV
+{
+// maximum allowed amount of pixels in a disc in a pixel
+#define CUDACONV_MAXPIXELSPERDISC 131072
+#define CUDACONV_MAXPTGPERCONV 131072
+struct CUDACONVConf_t
+    {
+        int gridSizeX;
+        int gridSizeY;
+        int blockSizeX;
+        int blockSizeY;
+        int ptgPerConv;
+        int pixelsPerDisc;
+
+        int MAX_PIXELS_PER_DISC = CUDACONV_MAXPIXELSPERDISC;
+        int MAX_PTGS_PER_CONV = CUDACONV_MAXPTGPERCONV;
+    };
+    typedef struct CUDACONVConf_t RunConfig;
+}
 
 class GPUConvolver
 {
     public:
     
-        GPUConvolver(int nsamples, CUDACONV::RunConfig);
+        GPUConvolver(Scan& scan, CUDACONV::RunConfig);
        ~GPUConvolver();
         
         /* Transfers beams from host to device. First call also 
          * allocates respective buffers.
          */
-		void update_beam(PolBeam beam);
+		void update_beam(PolBeam* beam);
 		/* Transfer sky from host to devices. First call also allocates
          * respective buffers.
          */
-        void update_sky(CUDACONV::RunConfig cfg, Sky sky);
+        void update_sky(Sky* sky);
         /* Runs convolution algorithm using a Scan. Store the resulting
          * data stream in data_a/b, which is expected to be allocated.
          * polFlag indicates which of the buffers (data_a, data_b or 
@@ -34,19 +62,19 @@ class GPUConvolver
             CUDACONV::RunConfig c, 
             float* data_a,
             float* data_b,
-            char polFlag,
-            Scan scan, Sky sky, PolBeam beam  );
+            Scan* scan, Sky* sky, PolBeam* beam);
 		
     private:
 
 		int nsamples;
 		bool hasBeam;
 		bool hasSky;
-        int chunkSize;
+        int pixPerDisc;
+        int ptgPerConv;
         /* Sky has 4 Stokes parameters (I, Q, U, V)*/
-        float *skyGPU;
+        float* skyGPU;
         size_t skyBufferSize;
-        /* Each beam has 6 componets*/
+        /* Each beam has 4 componets*/
 		float* aBeamsGPU;
 		float* bBeamsGPU;
         size_t beamBufferSize;
@@ -58,8 +86,8 @@ class GPUConvolver
 		int* skyPixelsInBeamGPU;
         size_t skyPixelsInBeamBufferSize;
         /* buffer to store pointing*/
-        double* ptgBuffer;
-        double* ptgBufferGPU;
+        float* ptgBuffer;
+        float* ptgBufferGPU;
         size_t ptgBufferSize;
         /* buffer to store result.*/
         float* result;     

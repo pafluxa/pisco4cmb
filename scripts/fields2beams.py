@@ -29,8 +29,6 @@ import healpy
 import matplotlib.pyplot as plt
 from scipy.interpolate import RectBivariateSpline
 
-#import matplotlib.pyplot as plt
-
 if __name__ == "__main__":
 
     datapath = sys.argv[1]
@@ -52,6 +50,8 @@ if __name__ == "__main__":
     gridsizes = list(map(int, f.readline().strip().split()))
     fhandler = io.StringIO(f.read())
     fieldData = numpy.loadtxt(fhandler).view(complex)
+    copolar = fieldData[:, 0]
+    cxpolar = fieldData[:, 1]
     fhandler.close()
     f.close()
     # setup interpolation grid
@@ -59,67 +59,117 @@ if __name__ == "__main__":
     umin, vmin, umax, vmax = ranges
     u = numpy.linspace(umin, umax, nx, endpoint=True)
     v = numpy.linspace(vmin, vmax, ny, endpoint=True)
-    # setup coordinates for interpolation
-    maxPix = healpy.ang2pix(nside, numpy.deg2rad(5.0), 0.0)
-    pixels = numpy.arange(0, maxPix)
-    theta, phi = healpy.pix2ang(nside, pixels)
-    uh = numpy.sin(theta)*numpy.cos(phi)
-    vh = numpy.sin(theta)*numpy.sin(phi)
     # make polarized beams as described in Rosset et al. 2010
-    tildeI = numpy.abs(fieldData[:, 0])**2 + numpy.abs(fieldData[:, 1])**2
-    tildeQ = numpy.abs(fieldData[:, 0])**2 - numpy.abs(fieldData[:, 1])**2
-    tildeU = 2*numpy.real(fieldData[:, 0] * numpy.conj(fieldData[:, 1]))
-    tildeV = -2*numpy.imag(fieldData[:, 0] * numpy.conj(fieldData[:, 1]))
-    # make plots some noise, I mean plots
+    tildeI = numpy.abs(copolar)**2 + numpy.abs(cxpolar)**2
+    tildeQ = numpy.abs(copolar)**2 - numpy.abs(cxpolar)**2
+    tildeU = 2*numpy.real(copolar * numpy.conj(cxpolar))
+    tildeV = -2*numpy.imag(copolar * numpy.conj(cxpolar))
+    
+    #''' uncomment to plot beams as written to disk by GRASP
     fig, axes = plt.subplots(1, 3, figsize=(12, 4))
     imI = axes[0].imshow(tildeI.reshape((ny, nx)),
-        extent=(umin, umax, vmin, vmax))
-    axes[0].set_xlim((-0.2, 0.2))
-    axes[0].set_ylim((-0.2, 0.2))
-    axes[0].set_xlabel('u')
-    axes[0].set_xlabel('v')
-    axes[0].set_title("tilde I")
+        extent=(umin, umax, vmin, vmax), origin='lower')
+    axes[0].set_xlim((-0.05, 0.05))
+    axes[0].set_ylim((-0.05, 0.05))
+    axes[0].set_xlabel('az (rad)')
+    axes[0].set_ylabel('el (rad)')
+    axes[0].set_title("tilde I (GRASP)")
     plt.colorbar(imI, ax=axes[0])
     imQ = axes[1].imshow(tildeQ.reshape((ny, nx)),
-        extent=(umin, umax, vmin, vmax))
-    axes[1].set_xlim((-0.2, 0.2))
-    axes[1].set_ylim((-0.2, 0.2))
-    axes[1].set_xlabel('u')
-    axes[1].set_xlabel('v')
-    axes[1].set_title("tilde Q")
+        extent=(umin, umax, vmin, vmax), origin='lower')
+    axes[1].set_xlim((-0.05, 0.05))
+    axes[1].set_ylim((-0.05, 0.05))
+    axes[1].set_xlabel('az (rad)')
+    axes[1].set_ylabel('el (rad)')
+    axes[1].set_title("tilde Q (GRASP)")
     plt.colorbar(imQ, ax=axes[1])
     imU = axes[2].imshow(tildeU.reshape((ny, nx)),
-        extent=(umin, umax, vmin, vmax))
-    axes[2].set_xlim((-0.2, 0.2))
-    axes[2].set_ylim((-0.2, 0.2))
-    axes[2].set_xlabel('u')
-    axes[2].set_xlabel('v')
-    axes[2].set_title("tilde U")
+        extent=(umin, umax, vmin, vmax), origin='lower')
+    axes[2].set_xlim((-0.05, 0.05))
+    axes[2].set_ylim((-0.05, 0.05))
+    axes[2].set_xlabel('az (rad)')
+    axes[2].set_ylabel('el (rad)')
+    axes[2].set_title("tilde U (GRASP)")
     plt.colorbar(imU, ax=axes[2])
     fig.tight_layout()
     plotname = 'polbeamplot_' + fnm
     plotpth = os.path.join(bpth, plotname)
     plt.show()
     #plt.savefig(plotpth)
-
+    #'''
+    
+    # setup coordinates for interpolation
+    maxPix = healpy.ang2pix(nside, numpy.deg2rad(5.0), 0.0)
+    pixels = numpy.arange(0, maxPix)
+    rho, sigma = healpy.pix2ang(nside, pixels)
+    # build interpolation grid coordinates
+    # flip the sign of vh to account for GRASP using a different
+    # coordinate system than PISCO. In particular, looking out at the 
+    # sky U points East and V points North. On the other hand, our 
+    # Healpix beam has it's theta_hat unit vector pointing South at 
+    # psi = 0 and East at psi = 90
+    uh = numpy.sin(rho)*numpy.sin(sigma)
+    vh = -numpy.sin(rho)*numpy.cos(sigma)
     # build interpolators
-    intrpI = RectBivariateSpline(u, v, tildeI.reshape((ny, nx)))
-    intrpQ = RectBivariateSpline(u, v, tildeQ.reshape((ny, nx)))
-    intrpU = RectBivariateSpline(u, v, tildeU.reshape((ny, nx)))
-    intrpV = RectBivariateSpline(u, v, tildeV.reshape((ny, nx)))
-    
-    # calculate x and y components of jones vectors
-    tildeI = intrpI(uh, vh, grid=False)
-    tildeQ = intrpQ(uh, vh, grid=False)
-    tildeU = intrpU(uh, vh, grid=False)
-    tildeV = intrpV(uh, vh, grid=False)
-    
+    intrpI = RectBivariateSpline(v, u, tildeI.reshape((ny, nx)))
+    intrpQ = RectBivariateSpline(v, u, tildeQ.reshape((ny, nx)))
+    intrpU = RectBivariateSpline(v, u, tildeU.reshape((ny, nx)))
+    intrpV = RectBivariateSpline(v, u, tildeV.reshape((ny, nx)))
+    # calculate polarized beams
+    tildeI = intrpI(vh, uh, grid=False)
+    tildeQ = intrpQ(vh, uh, grid=False)
+    tildeU = intrpU(vh, uh, grid=False)
+    tildeV = intrpV(vh, uh, grid=False)
+    # setup plotting of polarized beams
     pltdata = numpy.zeros(12*nside**2)
+    extndeg = numpy.asarray(
+        (200.0/2.0, -200.0/2.0, -200/2.0, 200/2.0))/60.0 
+    fig, axes = plt.subplots(1, 3, figsize=(12, 4))
+    pltdata[0:len(tildeI)] = tildeI
+    tildeIp = healpy.gnomview(pltdata, 
+        rot=(0, 90, 0), 
+        reso=2, xsize=400, ysize=400,
+        return_projected_map=True, no_plot=True)
+        
+    imI = axes[0].imshow(tildeIp, extent=extndeg, origin='lower')
+    axes[0].set_xlim((-1.0, 1.0))
+    axes[0].set_ylim((-1.0, 1.0))
+    axes[0].set_xlabel('Az (deg)')
+    axes[0].set_ylabel('El (deg)')
+    axes[0].set_title("tilde I")
+    plt.colorbar(imI, ax=axes[0])
+
+    pltdata[0:len(tildeQ)] = tildeQ
+    tildeQp = healpy.gnomview(pltdata, 
+        rot=(0, 90, 0),
+        reso=2, xsize=400, ysize=400,
+        return_projected_map=True, no_plot=True)
+    imQ = axes[1].imshow(tildeQp, extent=extndeg, origin='lower')
+    axes[1].set_xlim((-1.0, 1.0))
+    axes[1].set_ylim((-1.0, 1.0))
+    axes[1].set_xlabel('Az (deg)')
+    axes[1].set_ylabel('El (deg)')
+    axes[1].set_title("tilde Q")
+    plt.colorbar(imQ, ax=axes[1])
+
     pltdata[0:len(tildeU)] = tildeU
-    healpy.orthview(pltdata, rot=(0, 90, 0))
+    tildeUp = healpy.gnomview(pltdata, 
+        rot=(0, 90, 0), 
+        reso=2, xsize=400, ysize=400,
+        return_projected_map=True, no_plot=True)
+    imU = axes[2].imshow(tildeUp, extent=extndeg, origin='lower')
+    axes[2].set_xlim((-1.0, 1.0))
+    axes[2].set_ylim((-1.0, 1.0))
+    axes[2].set_xlabel('Az (deg)')
+    axes[2].set_ylabel('El (deg)')
+    axes[2].set_title("tilde U")
+    plt.colorbar(imU, ax=axes[2])
+    fig.tight_layout()
+    plotname = 'polbeamplot_' + fnm
+    plotpth = os.path.join(bpth, plotname)
     plt.show()
     
-    # setup output file
+    # write polarized beams to disk
     newfnm = 'hpx_tilde_beams_' + fnm
     finalpth = os.path.join(bpth, newfnm)
     beamData = numpy.vstack([tildeI, tildeQ, tildeU, tildeV]).swapaxes(0,1)

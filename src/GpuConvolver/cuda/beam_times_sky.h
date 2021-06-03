@@ -1,30 +1,16 @@
-#ifndef CUDACONVH__
-#define CUDACONVH__
-#define MAXDISCSIZE 10000
+#include "GpuConvolver/gpuconvolver.hpp"
 
-namespace CUDACONV
-{
-    struct CUDACONVConf_t
-    {
-        int chunkSize;
-        int gridSizeX;
-        int gridSizeY;
-        int blockSizeX;
-        int blockSizeY;
-        int MAX_PIXELS_PER_DISC;
-    };
-    typedef struct CUDACONVConf_t RunConfig;
-}
+#ifndef CUDACONVBEAMTIMESSKYH__
+#define CUDACONVBEAMTIMESSKYH__
 
-void beam_times_sky(
+extern "C" void 
+cudaconv_beam_times_sky(
     CUDACONV::RunConfig cfg, 
-    int nptgs,
-    double* ptgBuffer,
+    float* ptgBuffer,
     int bnside, int bnpixels, 
     float* beamsA, float* beamsB, 
     int skynside, float* sky,
-    int* intraBeamPixels, 
-    int* maxIntraBeamPix,
+    int* intraBeamPixels, int* maxIntraBeamPix,
     float *data);
 
 #endif
