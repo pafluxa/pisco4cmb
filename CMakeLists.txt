@@ -7,7 +7,7 @@ set(CMAKE_DISABLE_IN_SOURCE_BUILD ON)
 set(CMAKE_DISABLE_SOURCE_CHANGES ON)
 
 project(pixconv
-        LANGUAGES CXX
+        LANGUAGES CXX CUDA
         VERSION 0.1
         DESCRIPTION "Compiles PIxel Space COnvolution library.")
 
@@ -26,9 +26,9 @@ find_package(LAPACK REQUIRED)
 find_package(Sofa REQUIRED)
 find_package(cfitsio REQUIRED)
 
-# it seems like CMAKE can't find openmp on its own...
-SET(CMAKE_CXX_FLAGS
-  "${CMAKE_CXX_FLAGS} -march=native -fopenmp -pthread -O0")
+# it seems like CMAKE can't find openmp on its own
+# compile with -O2 seems to be a good compromise
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native -fopenmp -pthread -O2")
 
 # flag to disable correct polarization angle calculation
 if(CONVOLVER_DISABLECHI)
@@ -55,55 +55,80 @@ if(POLBEAM_DUMPBEAMS)
   add_definitions(-DPOLBEAM_DUMPBEAMS)
 endif()
 
-# library
-add_library(pisco SHARED
-    src/Sky/sky.cpp
-    src/Scan/scan.cpp
-    src/Bpoint/bpoint.cpp
-    src/Bpoint/ElapsedTime.cpp
-    src/Bpoint/jpl_eph.cpp
-    src/Mapping/mapping_routines.cpp
-    src/Polbeam/polbeam.cpp
-    src/Sphtrigo/sphtrigo.cpp
-    src/Convolver/convolver.cpp
-)
+#enable CUDA support
+if(USE_CUDA)
+  find_package(CUDA REQUIRED)
+  set(CUDA_SEPARABLE_COMPILATION ON)
+endif()
+
+# main library
+if(USE_CUDA)
+    cuda_add_library(pisco STATIC
+        src/Sky/sky.cpp
+        src/Scan/scan.cpp
+        src/Bpoint/bpoint.cpp
+        src/Bpoint/ElapsedTime.cpp
+        src/Bpoint/jpl_eph.cpp
+        src/Mapping/mapping_routines.cpp
+        src/Polbeam/polbeam.cpp
+        src/Sphtrigo/sphtrigo.cpp
+        src/Convolver/convolver.cpp
+        src/GpuConvolver/gpuconvolver.cu
+        src/GpuConvolver/cuda/beam_times_sky.cu
+        src/GpuConvolver/cuda/sphtrigo.cu
+        src/GpuConvolver/cuda/healpix_utils.cu)
+        
+    target_include_directories(pisco PRIVATE
+        src/GpuConvolver/cuda)
+else()
+    add_library(pisco STATIC
+        src/Sky/sky.cpp
+        src/Scan/scan.cpp
+        src/Bpoint/bpoint.cpp
+        src/Bpoint/ElapsedTime.cpp
+        src/Bpoint/jpl_eph.cpp
+        src/Mapping/mapping_routines.cpp
+        src/Polbeam/polbeam.cpp
+        src/Sphtrigo/sphtrigo.cpp
+        src/Convolver/convolver.cpp)
+endif()
+target_include_directories(pisco PRIVATE 
+    src/)
 target_include_directories(pisco PUBLIC
-    src/
     ${SOFA_INCLUDE_DIR}
     ${OpenMP_INCLUDE_DIRS}
     ${HEALPIX_INCLUDE_DIR}
     ${CHEALPIX_INCLUDE_DIR}
-    ${CFITSIO_INCLUDE_DIR}
-)
-# executable to simulate point source convolution
-add_executable(simulate_point_source_scan.x
-    src/sim_point_source_scan.cpp
-)
-target_include_directories(simulate_point_source_scan.x PRIVATE
-    src/
-)
-target_link_libraries(simulate_point_source_scan.x PRIVATE
+    ${CFITSIO_INCLUDE_DIR})
+# whole sky simulation executable
+if(USE_CUDA)
+  # executable to simulate whole sky simulation
+  cuda_add_executable(gpu_simulate_wholesky_scan.x 
+    src/cuda_sim_wholesky_scan.cpp)
+  target_include_directories(gpu_simulate_wholesky_scan.x 
+    PRIVATE src/)
+  target_link_libraries(
+    gpu_simulate_wholesky_scan.x 
     pisco
     ${SOFA_LIBRARIES}
     ${OpenMP_LIBRARIES}
     ${LAPACK_LIBRARIES}
     ${CHEALPIX_LIBRARIES}
     ${HEALPIX_LIBRARIES}
-    ${CFITSIO_LIBRARIES}
-)
-# executable to simulate whole sky simulation
-add_executable(simulate_wholesky_scan.x
-    src/sim_wholesky_scan.cpp
-)
-target_include_directories(simulate_wholesky_scan.x PRIVATE
-    src/
-)
-target_link_libraries(simulate_wholesky_scan.x PRIVATE
+    ${CFITSIO_LIBRARIES})
+else()
+  # executable to simulate whole sky simulation
+  add_executable(simulate_wholesky_scan.x src/sim_wholesky_scan.cpp)
+  target_include_directories(simulate_wholesky_scan.x PRIVATE src/)
+  target_link_libraries(
+    simulate_wholesky_scan.x 
     pisco
     ${SOFA_LIBRARIES}
     ${OpenMP_LIBRARIES}
     ${LAPACK_LIBRARIES}
     ${CHEALPIX_LIBRARIES}
     ${HEALPIX_LIBRARIES}
-    ${CFITSIO_LIBRARIES}
-)
+    ${CFITSIO_LIBRARIES})
+endif()
+
+
