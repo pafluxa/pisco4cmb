@@ -17,7 +17,7 @@ class Convolver
 
         Convolver(const Scan* scan, const Sky* sky, const PolBeam* beam);
        ~Convolver();
-        void exec_convolution(char polFlag, double* data_a, double* data_b);
+        void exec_convolution(char polFlag, float* data_a, float* data_b);
 
     private:
 

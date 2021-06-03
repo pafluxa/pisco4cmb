@@ -8,8 +8,7 @@
 #include <arr.h>
 #include <rangeset.h>
 
-Convolver::Convolver(
-    const Scan* _scan, const Sky* _sky, const PolBeam* _beam)
+Convolver::Convolver(const Scan* _scan, const Sky* _sky, const PolBeam* _beam)
 {
     scan = _scan;
     sky = _sky;
@@ -21,12 +20,12 @@ Convolver::~Convolver()
 }
 
 void Convolver::exec_convolution(
-    char polFlag, double* data_a, double* data_b)
+    char polFlag, float* data_a, float* data_b)
 {
     // convenience pointers
-    const double* ra_coords = scan->get_ra_ptr();
-    const double* dec_coords = scan->get_dec_ptr();
-    const double* pa_coords  = scan->get_pa_ptr();
+    const float* ra_coords = scan->get_ra_ptr();
+    const float* dec_coords = scan->get_dec_ptr();
+    const float* pa_coords  = scan->get_pa_ptr();
 
     #ifdef CONVOLVER_DISABLECHI
     std::cerr << "using chi = pa_bc!" << std::endl;
@@ -97,7 +96,7 @@ void Convolver::beam_times_sky(
     // find sky pixels around beam center, up to beam.rhoMax
     rmax = beam->get_rho_max();
     pointing sc(M_PI_2 - dec_bc, ra_bc);
-    sky->hpxBase->query_disc(sc, 0.1, intraBeamRanges);
+    sky->hpxBase->query_disc(sc, rmax, intraBeamRanges);
     // sky times beam multiplication loop
     data_a = 0.0;
     data_b = 0.0;
@@ -117,7 +116,7 @@ void Convolver::beam_times_sky(
             // compute rho sigma and chi at beam pixel
             SphericalTransformations::rho_sigma_chi_pix(
                 &rho, &sigma, &chi,
-                ra_bc , dec_bc, pa_bc,
+                ra_bc, dec_bc, pa_bc,
                 ra_pix, dec_pix);
             #ifdef CONVOLVER_DISABLECHI
             chi = pa_bc;
@@ -151,6 +150,15 @@ void Convolver::beam_times_sky(
                     beam_b[b] /= ws;
                 }
             }
+            /**
+            int beampix = beam->hpxBase->ang2pix(bp);
+            beam_a[0] = beam->aBeams[0][beampix];
+            beam_a[1] = beam->aBeams[1][beampix];
+            beam_a[2] = beam->aBeams[2][beampix];
+            beam_b[0] = beam->bBeams[0][beampix];
+            beam_b[1] = beam->bBeams[1][beampix];
+            beam_b[2] = beam->bBeams[2][beampix];
+            **/
             data_a = data_a
               + sky->sI[skyPix]*(beam_a[0])
               + sky->sQ[skyPix]*(beam_a[1]*c2chi - beam_a[2]*s2chi)

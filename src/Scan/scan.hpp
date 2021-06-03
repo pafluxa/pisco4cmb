@@ -6,34 +6,31 @@
 #ifndef _SCANH // begin include guard
 #define _SCANH
 
-// include healpix related routines
-//#include <healpix_base.h>
-
 class Scan
 {
     public:
 
-        Scan( unsigned long nsamples );
+        Scan(long nsamples);
         Scan( 
-			unsigned long nsamples,
-			const double* ra,
-			const double* dec,
-			const double* pa);
+			long nsamples,
+			const float* ra,
+			const float* dec,
+			const float* pa);
 			
-       ~Scan( void ){};
+       ~Scan(void){};
         
-        unsigned long get_nsamples (void) const {return nsamp;};
+        long get_nsamples (void) const {return nsamp;};
 		
-		const double* get_ra_ptr(void) const;
-		const double* get_dec_ptr(void) const;
-		const double* get_pa_ptr(void) const;
+		const float* get_ra_ptr(void) const;
+		const float* get_dec_ptr(void) const;
+		const float* get_pa_ptr(void) const;
 	
     private:
 		
-        const double* ra;
-        const double* dec;
-        const double* pa;        
-        unsigned long nsamp;
+        const float* ra;
+        const float* dec;
+        const float* pa;        
+        long nsamp;
 };
 
 #endif // end include guard

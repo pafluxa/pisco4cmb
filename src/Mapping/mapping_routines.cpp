@@ -14,12 +14,11 @@ void
 libmapping_project_data_to_matrices
 (
     // input
-    int nsamples , int ndets,
-    double ra[], double dec[], double pa[],
-    double pol_angles[],
-    double data[] , int bad_data_samples[], int dets_to_map[],
+    int nsamples, 
+    float ra[], float dec[], float pa[],
+    int ndets, double pol_angles[],
+    float data[] , 
     int map_nside,
-    int map_size , int pixels_in_the_map[],
     // output
     double AtA[], double AtD[]
 )
@@ -31,48 +30,39 @@ libmapping_project_data_to_matrices
     ang2pix_ring(map_nside, 
         M_PI_2 - 0.3 / 32.0, M_PI - 0.3 / 32.0, &CENTER_INDEX);
     #endif
-    for(int det=0; det < ndets; det++)
+    for(int det = 0; det < ndets; det++)
     {
-        if(dets_to_map[det] == 0)
+        double pol_angle = pol_angles[det];
+        for(int sample = 0; sample < nsamples; sample++)
         {
-            double pol_angle = pol_angles[det];
-            for(int sample=0; sample < nsamples; sample++)
+            double _phi, _theta, _psi;
+            _phi   = ra[det * nsamples + sample];
+            _theta = M_PI_2 - dec[det * nsamples + sample];
+            // Passed arguments are counterclockwise on the sky
+            // CMB requires clockwise
+            _psi   = -(pol_angle + pa[det * nsamples + sample]);
+            ang2pix_ring(map_nside, _theta, _phi, &pix);
+            if(pix >= 0)
             {
-                if(bad_data_samples[det*nsamples + sample] == 0)
-                {
-                    double _phi, _theta, _psi;
-                    _phi   = ra[det * nsamples + sample];
-                    _theta = M_PI_2 - dec[det * nsamples + sample];
-                    // Passed arguments are counterclockwise on the sky
-                    // CMB requires clockwise
-                    _psi   = -(pol_angle + pa[det*nsamples + sample]);
-                    ang2pix_ring(map_nside, _theta, _phi, &pix);
-                    if(pix >= 0)
-                    {
-                        double d = data[det*nsamples + sample];
-                        double c2psi = cos(2.0*_psi);
-                        double s2psi = sin(2.0*_psi);
-                        // update AtD
-                        AtD[pix*3 + 0] += 1.0   * d;
-                        AtD[pix*3 + 1] += c2psi * d;
-                        AtD[pix*3 + 2] += s2psi * d;
-                         // update matrix
-                        AtA[pix*9 + 0] += 1.0;
-                        AtA[pix*9 + 1] += c2psi;
-                        AtA[pix*9 + 2] += s2psi;
-                        AtA[pix*9 + 3] += c2psi;
-                        AtA[pix*9 + 4] += c2psi*c2psi;
-                        AtA[pix*9 + 5] += c2psi*s2psi;
-                        AtA[pix*9 + 6] += s2psi;
-                        AtA[pix*9 + 7] += c2psi*s2psi;
-                        AtA[pix*9 + 8] += s2psi*s2psi;
-                    }
-
-                }
+                double d = data[det*nsamples + sample];
+                double c2psi = cos(2.0*_psi);
+                double s2psi = sin(2.0*_psi);
+                // update AtD
+                AtD[pix*3 + 0] += 1.0   * d;
+                AtD[pix*3 + 1] += c2psi * d;
+                AtD[pix*3 + 2] += s2psi * d;
+                 // update matrix
+                AtA[pix*9 + 0] += 1.0;
+                AtA[pix*9 + 1] += c2psi;
+                AtA[pix*9 + 2] += s2psi;
+                AtA[pix*9 + 3] += c2psi;
+                AtA[pix*9 + 4] += c2psi*c2psi;
+                AtA[pix*9 + 5] += c2psi*s2psi;
+                AtA[pix*9 + 6] += s2psi;
+                AtA[pix*9 + 7] += c2psi*s2psi;
+                AtA[pix*9 + 8] += s2psi*s2psi;
             }
-
         }
-
     }
     #ifdef MAPPING_DEBUG
     int idx = int(CENTER_INDEX);
@@ -92,13 +82,14 @@ void
 libmapping_get_IQU_from_matrices
 (
     // input
-    int map_nside, int map_size ,
-    double AtA[], double AtD[], int pixels_in_the_map[],
+    int map_nside,
+    double AtA[], double AtD[],
     // output
     float I[], float Q[], float U[], float W[]
 )
 {
     long index;
+    int map_size = 12 * map_nside * map_nside;
     #ifdef MAPPING_DEBUG
     // compute central pixel (dec=0, ra=PI)
     long CENTER_INDEX;

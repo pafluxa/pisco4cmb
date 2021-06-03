@@ -24,16 +24,17 @@
 #include <healpix_base.h>
 #include <pointing.h>
 
-#define NSIDE_SKY (512)
+#define NSIDE_SKY (256)
 #define NPIXELS_SKY (12*(NSIDE_SKY)*(NSIDE_SKY))
 #define NSAMPLES (NPIXELS_SKY)
-#define NSIDE_BEAM 2048
 /** how to calculate the number of pixels below
 import healpy
 import numpy
-print(healpy.query_disc(2048, (0,0,1), numpy.radians(5)).size)
-#95484
+nside = 2048
+print(healpy.query_disc(nside, (0,0,1), numpy.radians(5)).size)
+#2048
 **/
+#define NSIDE_BEAM 2048
 #define NPIXELS_BEAM (95484)
 
 /** buffers to store the sky **/
@@ -42,28 +43,23 @@ float* skyQ;
 float* skyU;
 float* skyV;
 /** buffers so store PSB pointing **/
-double* ra;
-double* dec;
-double* psi;
+float* ra;
+float* dec;
+float* psi;
 /** map-making accumulation matrix (vector) **/
 double* AtA;
 double* AtD;
 /** buffers to simulated data **/
 // detector A
-double* psbDataA;
+float* psbDataA;
 // detector B
-double* psbDataB;
-/** buffers needed for mapping. */
-int* scanMask;
-int* mapPixels;
+float* psbDataB;
 /**
  * routine to initialize the scan to a raster scan around a location
  * defined by ra0, dec0. the scan is executed at position angle psi0.
  **/
 void init_wholesky_scan(
-    int nside, double pa,
-    // output
-    double *ra, double *dec, double *psi);
+    int nside, double pa, float *ra, float *dec, float *psi);
 /**routine to load sky from disk
  **/
 void load_sky_data(std::string path, 
@@ -80,11 +76,7 @@ int main(int argc, char** argv )
     // path to write the output map
     std::string outfilePath;
     // which detectors get projected
-    char projDets[1];
-    // polarization of input source
-    float pI = 1.0;
-    float pQ = 0.0;
-    float pU = 0.0;
+    char projDets;
     bool beamsFromGauss = true;
     double bfwhmx = 0.0;
     double bfwhmy = 0.0;
@@ -92,11 +84,12 @@ int main(int argc, char** argv )
     std::string beamAPath;
     std::string beamBPath;
     int opt;
-    while((opt = getopt(argc, argv, "t:m:o:p:a:b:")) != -1 ) {
+    while((opt = getopt(argc, argv, "t:m:o:p:a:b:")) != -1 ) 
+    {
         switch(opt)
         {
             case 'p':
-                projDets[0] = char(optarg[0]);
+                projDets = char(optarg[0]);
                 continue;
             case 'o':
                 outfilePath.assign(optarg);
@@ -126,7 +119,7 @@ int main(int argc, char** argv )
     std::ofstream outdata;
     outdata.open(outfilePath);
     std::cout << inputSkyPath << std::endl;
-    std::cout << projDets[0] << std::endl;
+    std::cout << projDets << std::endl;
     std::cout << beamAPath << std::endl;
     std::cout << beamBPath << std::endl;
     std::cout << outfilePath << std::endl;
@@ -135,66 +128,71 @@ int main(int argc, char** argv )
     load_sky_data(inputSkyPath, skyI, skyQ, skyU, skyV);
     Sky sky(NSIDE_SKY, skyI, skyQ, skyU, skyV);
     // initialize polarized beam object. read beam data from disk
-    PolBeam beam(NSIDE_BEAM, NPIXELS_BEAM);
-    if(beamsFromGauss) {
+    PolBeam beam(NSIDE_BEAM, NPIXELS_BEAM, 0.0, projDets);
+    if(beamsFromGauss) 
+    {
         bfwhmx = std::stod(beamAPath.c_str());
         bfwhmy = std::stod(beamBPath.c_str());
         beam.make_unpol_gaussian_elliptical_beams(bfwhmx, bfwhmy, 0.0);
     }
-    else {
+    else if (projDets == 'a')// || projDets == 'p') 
+    {
         load_beam_data('a', beamAPath, beam);
-        load_beam_data('b', beamBPath, beam);
     }
-    beam.build_beams();
+    else if (projDets == 'b')// || projDets == 'p') 
+    {
+        load_beam_data('b', beamBPath, beam);
+        std::cout << "POLBEAM OK" << std::endl;
+    }
+    else if (projDets == 'p')// || projDets == 'p') 
+    {
+        load_beam_data('a', beamBPath, beam);
+        load_beam_data('b', beamBPath, beam);
+        std::cout << "POLBEAM OK" << std::endl;
+    }
+    beam.build(NSIDE_SKY);
+    std::cout << "POLBEAM OK" << std::endl;
     // initialize scan
     Scan scan(NSAMPLES, ra, dec, psi);
     // initialize convolver object
     Convolver cconv(&scan, &sky, &beam);
     // setup detetctor angle arays
-    int detectorMask[] = {0};
     double detectorAngle[1];
-    //double positionAngles[] = {-90, -67.5, -45, -22.5, 0, 22.5, 45, 67.5, 90};
     double positionAngles[] = {-45, 0, 45};
-    std::cout << positionAngles[0] << " ";
-    std::cout << positionAngles[1] << " ";
-    std::cout << positionAngles[2] << " ";
-    std::cout << positionAngles[3] << " ";
-    std::cout << positionAngles[4] << " " << std::endl;
-    // every PSB scans the sky 3 times at three different angles
+    // every PSB scans the sky at different angles
     for(double bcpa_deg: positionAngles)
     {
         // angles are in degrees. convert.
-        double bcpa = M_PI*(bcpa_deg / 180.0);
-        // zero-out data buffer
-        std::memset(psbDataA, 0, sizeof(double)*NSAMPLES);
-        std::memset(psbDataB, 0, sizeof(double)*NSAMPLES);
+        double bcpa = M_PI * (bcpa_deg / 180.0);
         init_wholesky_scan(NSIDE_SKY, bcpa, ra, dec, psi);
         // compute convolution for detector A and B of PSB
-        cconv.exec_convolution('p', psbDataA, psbDataB);
+        cconv.exec_convolution(projDets, psbDataA, psbDataB);
         // project detector data to map-making matrices
-        if(projDets[0] == 'a' || projDets[0] == 'p') {
+        if(projDets == 'a' || projDets == 'p') 
+        {
             // project detector a
             detectorAngle[0] = 0;
             libmapping_project_data_to_matrices
             (
-                NSAMPLES, 1,
+                NSAMPLES, 
                 ra, dec, psi,
-                detectorAngle,
-                psbDataA, scanMask, detectorMask,
-                NSIDE_SKY, NPIXELS_SKY, mapPixels,
+                1, detectorAngle,
+                psbDataA,
+                NSIDE_SKY,
                 AtA, AtD
             );
         }
-        if(projDets[0] == 'b' || projDets[0] == 'p') {
+        if(projDets == 'b' || projDets == 'p') 
+        {
             // project detector b
             detectorAngle[0] = M_PI_2;
             libmapping_project_data_to_matrices
             (
-                NSAMPLES, 1,
+                NSAMPLES,
                 ra, dec, psi,
-                detectorAngle,
-                psbDataB, scanMask, detectorMask,
-                NSIDE_SKY, NPIXELS_SKY, mapPixels,
+                1, detectorAngle,
+                psbDataB,
+                NSIDE_SKY,
                 AtA, AtD
             );
         }
@@ -205,8 +203,8 @@ int main(int argc, char** argv )
     std::memset(skyV, 0, sizeof(float)*NPIXELS_SKY);
     libmapping_get_IQU_from_matrices
     (
-        NSIDE_SKY, NPIXELS_SKY,
-        AtA, AtD, mapPixels,
+        NSIDE_SKY,
+        AtA, AtD,
         skyI, skyQ, skyU, skyV
     );
     for(int i=0; i<NPIXELS_SKY; i++)
@@ -225,13 +223,13 @@ int main(int argc, char** argv )
 void init_wholesky_scan(
     int nside, 
     double pa,
-    double *ra, double *dec, double *psi) {
+    float* ra, float* dec, float* psi) 
+{
     
     int i;
-    int npixels = 12 * nside * nside;
     Healpix_Base hpx(nside, RING, SET_NSIDE);
     
-    for(i = 0; i < npixels; i++)
+    for(i = 0; i < NSAMPLES; i++)
     {
         pointing ptg = hpx.pix2ang(i);
         ra[i] = ptg.phi;
@@ -240,36 +238,29 @@ void init_wholesky_scan(
     }
 }
 
-void allocate_everything(void){
-
+void allocate_everything(void) 
+{
     skyI = (float*)malloc(NPIXELS_SKY*sizeof(float));
     skyQ = (float*)malloc(NPIXELS_SKY*sizeof(float));
     skyU = (float*)malloc(NPIXELS_SKY*sizeof(float));
     skyV = (float*)malloc(NPIXELS_SKY*sizeof(float));
-
-    ra  = (double*)malloc(sizeof(double)*NSAMPLES);
-    dec = (double*)malloc(sizeof(double)*NSAMPLES);
-    psi = (double*)malloc(sizeof(double)*NSAMPLES);
-
+    
+    ra = (float*)malloc(sizeof(float)*NSAMPLES);
+    dec = (float*)malloc(sizeof(float)*NSAMPLES);
+    psi = (float*)malloc(sizeof(float)*NSAMPLES);
+    
+    psbDataA = (float*)malloc(sizeof(float)*NSAMPLES);
+    psbDataB = (float*)malloc(sizeof(float)*NSAMPLES);
+    
+    // zero out map-making accumulation matrices
     AtA = (double*)malloc(sizeof(double)*9*NPIXELS_SKY);
     AtD = (double*)malloc(sizeof(double)*3*NPIXELS_SKY);
-    // zero out map-making accumulation matrices
     std::memset(AtA, 0, sizeof(double)*9*NPIXELS_SKY);
     std::memset(AtD, 0, sizeof(double)*3*NPIXELS_SKY);
-    scanMask = (int*)malloc(sizeof(int)*NSAMPLES);
-    // no samples are masked
-    std::memset(scanMask, 0, sizeof(int)*NSAMPLES);
-    mapPixels = (int*)malloc(sizeof(int)*NPIXELS_SKY);
-    // all pixels are mapped
-    for(int i=0; i < NPIXELS_SKY; i++){ mapPixels[i] = i; }
-
-    psbDataA = (double*)malloc(sizeof(double)*NSAMPLES);
-    psbDataB = (double*)malloc(sizeof(double)*NSAMPLES);
-
 }
 
-void free_everything(void) {
-
+void free_everything(void) 
+{
     free(skyI);
     free(skyQ);
     free(skyU);
@@ -282,28 +273,28 @@ void free_everything(void) {
     free(AtA);
     free(AtD);
     std::cerr << "AtA and AtD buffers freed" << std::endl;
-    free(scanMask);
-    std::cerr << "scanMask buffers freed" << std::endl;
-    free(mapPixels);
-    std::cerr << "mapPixels buffers freed" << std::endl;
     free(psbDataA);
     free(psbDataB);
     std::cerr << "data buffers freed" << std::endl;
 }
 
 // this function is more robust in the case the wrong file is used
-void load_beam_data(char polFlag, std::string path, PolBeam& beam) {
+void load_beam_data(char polFlag, std::string path, PolBeam& beam) 
+{
     int i = 0;
     std::ifstream detBeams(path);
-    if(!detBeams.is_open()){
+    if(!detBeams.is_open())
+    {
         std::cout << "File not found" << std::endl;
         throw std::invalid_argument("cannot open beam data files.");
     }
     std::string line;
-    while(std::getline(detBeams, line) && i < NPIXELS_BEAM) {
+    while(std::getline(detBeams, line) && i < NPIXELS_BEAM) 
+    {
         std::istringstream iss(line);
         // stop if an error while parsing occurs
-        if(polFlag == 'a') {
+        if(polFlag == 'a') 
+        {
             if(!(iss
                  >> beam.Ia[i]
                  >> beam.Qa[i]
@@ -312,11 +303,9 @@ void load_beam_data(char polFlag, std::string path, PolBeam& beam) {
             {
                 throw std::length_error("not enough data.");
             }
-            //beam.Qa[i] = beam.Ia[i];
-            //beam.Ua[i] = 0.0;
-            //beam.Va[i] = 0.0;
         }
-        else if(polFlag == 'b') {
+        else if(polFlag == 'b') 
+        {
             if(!(iss
                  >> beam.Ib[i]
                  >> beam.Qb[i]
@@ -325,11 +314,9 @@ void load_beam_data(char polFlag, std::string path, PolBeam& beam) {
             {
                 throw std::length_error("not enough data.");
             }
-            //beam.Qb[i] = beam.Ib[i];
-            //beam.Ub[i] = 0.0;
-            //beam.Vb[i] = 0.0;
         }
-        else {
+        else 
+        {
             throw std::invalid_argument("fail");
         }
         i++;
@@ -343,12 +330,14 @@ void load_sky_data(
 {
     int i = 0;
     std::ifstream skydata(path);
-    if(!skydata.is_open()){
+    if(!skydata.is_open())
+    {
         std::cout << "File not found" << std::endl;
         throw std::invalid_argument("cannot open sky data files.");
     }
     std::string line;
-    while(std::getline(skydata, line) && i < NPIXELS_SKY) {
+    while(std::getline(skydata, line) && i < NPIXELS_SKY) 
+    {
         std::istringstream iss(line);
         // stop if an error while parsing occurs
         if(!(iss >> skyI[i] >> skyQ[i] >> skyU[i] >> skyV[i]))
