@@ -1,6 +1,6 @@
 #!/bin/bash
 TAG="256-sky_512-beam_offsetreflector-pair-cuda"
-nside=256
+nside=128
 beamnside=2048
 beamfwhm_deg=0.6604
 scan=wholesky 
@@ -20,12 +20,7 @@ cmake ../ \
   -DCONVOLVER_DEBUG=ON \
   -DMAPPING_DEBUG=ON \
   -DUSE_CUDA=$cuda || exit 1
-if [ $cuda == ON ]
-then
-    make -j4 gpu_simulate_wholesky_scan.x || exit 1
-else
-    make -j4 simulate_wholesky_scan.x || exit 1
-fi
+make -j4 simulate_wholesky_scan.x || exit 1
 cd ../ || exit 1
 # build beams
 python scripts/fields2beams.py \
@@ -46,13 +41,7 @@ cp data/cls/cl_data.csv output/ || exit 1
 mv cl_data.csv output/ || exit 1
 # execute simulation
 echo "running detector "$det" for wholesky simulation "$TAG
-program=""
-if [ $cuda == ON ]
-then
-    program=gpu_simulate_wholesky_scan.x
-else
-    program=simulate_wholesky_scan.x
-fi
+program=simulate_wholesky_scan.x
 time "./build/"$program \
   -m "output"/cmb.txt \
   -p $det \
