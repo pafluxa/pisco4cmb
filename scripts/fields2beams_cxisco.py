@@ -50,8 +50,8 @@ if __name__ == "__main__":
     gridsizes = list(map(int, f.readline().strip().split()))
     fhandler = io.StringIO(f.read())
     fieldData = numpy.loadtxt(fhandler).view(complex)
-    copolar = fieldData[:, 0]
-    cxpolar = fieldData[:, 1]
+    cxpolar = fieldData[:, 0]
+    copolar = fieldData[:, 1]
     fhandler.close()
     f.close()
     # setup interpolation grid
