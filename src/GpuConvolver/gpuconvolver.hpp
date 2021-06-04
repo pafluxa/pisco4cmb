@@ -5,38 +5,14 @@
 #ifndef _GPUCONVOLVERH
 #define _GPUCONVOLVERH
 
-#include <cuda.h>
-#include <cuda_runtime.h>
-
 #include "Sky/sky.hpp"
 #include "Scan/scan.hpp"
 #include "Polbeam/polbeam.hpp"
+#include "GpuConvolver/cuda/cudaconv.h"
 
 #define N_POINTING_COORDS 4
 #define N_SKY_COMP 4
 #define N_POLBEAMS 4
-
-//#define CUDACONV_SKYASTEXTURE
-
-namespace CUDACONV
-{
-// maximum allowed amount of pixels in a disc in a pixel
-#define CUDACONV_MAXPIXELSPERDISC 131072
-#define CUDACONV_MAXPTGPERCONV 131072
-struct CUDACONVConf_t
-    {
-        int gridSizeX;
-        int gridSizeY;
-        int blockSizeX;
-        int blockSizeY;
-        int ptgPerConv;
-        int pixelsPerDisc;
-
-        int MAX_PIXELS_PER_DISC = CUDACONV_MAXPIXELSPERDISC;
-        int MAX_PTGS_PER_CONV = CUDACONV_MAXPTGPERCONV;
-    };
-    typedef struct CUDACONVConf_t RunConfig;
-}
 
 class GPUConvolver
 {
@@ -78,10 +54,11 @@ class GPUConvolver
 		float* aBeamsGPU;
 		float* bBeamsGPU;
         size_t beamBufferSize;
-		/* buffers to store intra-beam sky pixels. */
+        /* buffers to store number of intra-beam sky pixels. */
 		int* nPixelsInDisc;
 		int* nPixelsInDiscGPU;
         size_t nPixelInDiscBufferSize;
+        /* buffers to store intra-beam sky pixels. */
         int* skyPixelsInBeam;
 		int* skyPixelsInBeamGPU;
         size_t skyPixelsInBeamBufferSize;

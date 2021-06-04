@@ -1,5 +1,6 @@
 #include <iostream>
-#include "beam_times_sky.h"
+
+#include "cudaconv.h"
 #include "sphtrigo.h"
 #include "healpix_utils.h"
 
@@ -12,23 +13,18 @@ __global__ void
 kernel_beam_times_sky
 (
     int threadsPerBlock,
-    
     int nptgs,
     float* ptgBuffer, 
-    
     int bnside, 
     int bnpixels, 
-
     float* beamsA, 
     float* beamsB, 
-    
     int skynside, 
     float* sky,
-    
     int pixelsPerDisc,
     int* intraBeamPixels, 
     int* maxIntraBeamPix,
-    
+    // output
     float *data)
 {   
     extern __shared__  double sharedMem[];
@@ -107,7 +103,6 @@ kernel_beam_times_sky
             #ifdef CUDACONV_USE_INTERPOLATION
             // Interpolate beam at (rho,sigma).	
             cudaHealpix::get_interpol(bnside, rho, sigma, neighPixels, wgt);         
-            // apply beam interpolation at (rho, sigma)
             for(m = 0; m < 4; m++)
             {
                 // reset beam value buffers
@@ -125,7 +120,7 @@ kernel_beam_times_sky
                 }
             }
             #else
-            /* Get the closest beam pixel to beam coordinates (rho, sigma). */
+            /* Get the closest beam pixel to beam coordinates. */
             bp = cudaHealpix::ang2pix(bnside, rho, sigma);
             baval[0] = beamsA[4 * bp + 0];
             baval[1] = beamsA[4 * bp + 1];
@@ -169,7 +164,7 @@ kernel_beam_times_sky
 }
  
 extern void 
-cudaconv_beam_times_sky( 
+CUDACONV::beam_times_sky( 
     CUDACONV::RunConfig cfg, 
 	// pointing
     float* ptgBufferGPU, 
@@ -193,7 +188,7 @@ cudaconv_beam_times_sky(
         sizeof(float) * N_SKY_COMP * 12 * skynside * skynside;
     cudaBindTexture(0, tex_skyGPU, skyGPU, skyBufferSize);
     #endif
-    
+    // call cuda kernel
     kernel_beam_times_sky
     <<<gridcfg, blockcfg, shMemBufferSize>>>
     (
