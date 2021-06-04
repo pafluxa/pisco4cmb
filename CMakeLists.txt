@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.9)
+cmake_minimum_required(VERSION 3.12)
 # Tell Cmake about where to find scripts to look up for some dependencies
 set(CMAKE_MODULE_PATH
     ${CMAKE_MODULE_PATH}
@@ -6,7 +6,7 @@ set(CMAKE_MODULE_PATH
 set(CMAKE_DISABLE_IN_SOURCE_BUILD ON)
 set(CMAKE_DISABLE_SOURCE_CHANGES ON)
 project(pisco
-        LANGUAGES CXX CUDA
+        LANGUAGES CUDA CXX
         VERSION 0.2
         DESCRIPTION "Compiles PIxel Space COnvolution library.")
 # enable compilation using standard C++11
@@ -17,7 +17,6 @@ set(CMAKE_CXXFLAGS_DEBUG "-g -G -Wall -O0")
 # directives to find required packages
 find_package(OpenMP REQUIRED)
 find_package(Healpix REQUIRED)
-find_package(CHealpix REQUIRED)
 find_package(LAPACK REQUIRED)
 # some day, I will add a proper Input/Output module using this...
 #find_package(cnpy REQUIRED)
@@ -25,8 +24,7 @@ find_package(Sofa REQUIRED)
 find_package(cfitsio REQUIRED)
 # it seems like CMAKE can't find openmp on its own
 # compile with -O2 seems to be a good compromise
-SET(CMAKE_CXX_FLAGS 
-  "${CMAKE_CXX_FLAGS} -march=native -fopenmp -pthread -O2")
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native -fopenmp -pthread -O2")
 # flag to disable correct polarization angle calculation
 if(CONVOLVER_DISABLECHI)
   add_definitions(-DCONVOLVER_DISABLECHI)
@@ -55,6 +53,8 @@ endif()
 if(USE_CUDA)
   find_package(CUDA REQUIRED)
   set(CUDA_SEPARABLE_COMPILATION ON)
+  # instruct nvcc to use fPIC for separate compilation of CUDA objects
+  set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS}; --compiler-options -fPIC)
 endif()
 # enable beam interpolation when calculating the convolution
 # roughly doubles the time taken by the gpu routine!
@@ -67,9 +67,9 @@ if(CUDACONV_SKYASTEXTURE)
   add_definitions(-DCUDACONV_SKYASTEXTURE)
 endif()
 
-# compile main library
+# compile main library (libpisco)
 if(USE_CUDA)
-    cuda_add_library(pisco STATIC
+    cuda_add_library(pisco SHARED
         src/Sky/sky.cpp
         src/Scan/scan.cpp
         src/Bpoint/bpoint.cpp
@@ -78,15 +78,12 @@ if(USE_CUDA)
         src/Mapping/mapping_routines.cpp
         src/Polbeam/polbeam.cpp
         src/Sphtrigo/sphtrigo.cpp
-        src/Convolver/convolver.cpp
         src/GpuConvolver/gpuconvolver.cu
-        src/GpuConvolver/cuda/beam_times_sky.cu
+        src/GpuConvolver/cuda/cudaconv.cu
         src/GpuConvolver/cuda/sphtrigo.cu
         src/GpuConvolver/cuda/healpix_utils.cu)
-    target_include_directories(pisco PRIVATE
-        src/GpuConvolver/cuda)
 else()
-    add_library(pisco STATIC
+    add_library(pisco SHARED
         src/Sky/sky.cpp
         src/Scan/scan.cpp
         src/Bpoint/bpoint.cpp
@@ -94,11 +91,13 @@ else()
         src/Bpoint/jpl_eph.cpp
         src/Mapping/mapping_routines.cpp
         src/Polbeam/polbeam.cpp
-        src/Sphtrigo/sphtrigo.cpp
-        src/Convolver/convolver.cpp)
+        src/Sphtrigo/sphtrigo.cpp)
 endif()
+# include private headers
 target_include_directories(pisco PRIVATE 
-    src/)
+    src/
+    ${HEALPIX_INCLUDE_DIR})
+# include public headers from dependencies
 target_include_directories(pisco PUBLIC
     ${SOFA_INCLUDE_DIR}
     ${OpenMP_INCLUDE_DIRS}
@@ -107,23 +106,14 @@ target_include_directories(pisco PUBLIC
     ${CFITSIO_INCLUDE_DIR})
 # compile wholesky simulation executable
 if(USE_CUDA)
-  cuda_add_executable(gpu_simulate_wholesky_scan.x 
-    src/cuda_sim_wholesky_scan.cpp)
-  target_include_directories(gpu_simulate_wholesky_scan.x 
-    PRIVATE src/)
-  target_link_libraries(
-    gpu_simulate_wholesky_scan.x 
-    pisco
-    ${SOFA_LIBRARIES}
-    ${OpenMP_LIBRARIES}
-    ${LAPACK_LIBRARIES}
-    ${CHEALPIX_LIBRARIES}
-    ${HEALPIX_LIBRARIES}
-    ${CFITSIO_LIBRARIES})
+  cuda_add_executable(simulate_wholesky_scan.x src/cuda_sim_wholesky_scan.cpp)
+  cuda_add_executable(simulate_pointsource_scan.x src/cuda_sim_pointsource_scan.cpp)
 else()
-  target_include_directories(simulate_wholesky_scan.x PRIVATE src/)
-  target_link_libraries(
-    simulate_wholesky_scan.x 
+  add_executable(simulate_wholesky_scan.x src/sim_wholesky_scan.cpp)
+endif()
+target_include_directories(simulate_wholesky_scan.x PRIVATE src/)
+target_include_directories(simulate_pointsource_scan.x PRIVATE src/)
+target_link_libraries(simulate_wholesky_scan.x 
     pisco
     ${SOFA_LIBRARIES}
     ${OpenMP_LIBRARIES}
@@ -131,6 +121,12 @@ else()
     ${CHEALPIX_LIBRARIES}
     ${HEALPIX_LIBRARIES}
     ${CFITSIO_LIBRARIES})
-endif()
-
+target_link_libraries(simulate_pointsource_scan.x 
+    pisco
+    ${SOFA_LIBRARIES}
+    ${OpenMP_LIBRARIES}
+    ${LAPACK_LIBRARIES}
+    ${CHEALPIX_LIBRARIES}
+    ${HEALPIX_LIBRARIES}
+    ${CFITSIO_LIBRARIES})
 
