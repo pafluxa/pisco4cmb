@@ -1,6 +1,9 @@
 #ifndef __MAPPINGH__
 #define __MAPPINGH__
 
+#define MAPPING_ILLCONDITIONED (0)
+#define MAPPING_BADPOLCOVERAGE (0)
+
 void
 libmapping_project_data_to_matrices
 (
