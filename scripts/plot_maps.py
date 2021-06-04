@@ -4,42 +4,25 @@ import healpy
 import numpy
 import matplotlib.pyplot as plt
 
-nside = 512
-npix = 12*nside*nside
-pols = sys.argv[1]
-datapath = sys.argv[2]
+nside = int(sys.argv[1])
+npix = 12 * nside * nside
+pols = sys.argv[2]
+datapath = sys.argv[3]
 plotpath = os.path.basename(datapath) + ".png"
 plotpath = os.path.join(os.path.dirname(datapath), plotpath)
-nzpixels, Idata, Qdata, Udata = numpy.loadtxt(datapath, unpack=True)
-nzpixels = nzpixels.astype('int32')
-I2 = numpy.zeros(npix)
-Q2 = numpy.zeros(npix)
-U2 = numpy.zeros(npix)
-I2[nzpixels] = Idata
-Q2[nzpixels] = Qdata
-U2[nzpixels] = Udata
-
-I1 = numpy.zeros(npix)
-Q1 = numpy.zeros(npix)
-U1 = numpy.zeros(npix)
-
-I1[numpy.argmax(I2)] = 1.0
+Idata, Qdata, Udata, Vdata = numpy.loadtxt(datapath, unpack=True)
+I2 = numpy.zeros_like(Idata)
+Q2 = numpy.zeros_like(Qdata)
+U2 = numpy.zeros_like(Udata)
+I2[numpy.argmax(Idata)] = 1.0
 if pols == 'Q':
-    Q1[numpy.argmax(I2)] = 1.0
+    Q2[numpy.argmax(Idata)] = 1.0
 if pols == 'U':
-    U1[numpy.argmax(I2)] = 1.0
+    U2[numpy.argmax(Idata)] = 1.0
     
 # normalize
-Is, Qs, Us = healpy.smoothing(
-    (I1, Q1, U1), fwhm=numpy.deg2rad(1.1), pol=True)
-'''
-ns = numpy.sum(Is)
-np = numpy.sum(I2)
-r = ns/np
-I2 = I2*r
-Q2 = Q2*r
-U2 = U2*r
-'''
+Is, Qs, Us = healpy.smoothing((I2, Q2, U2), fwhm=numpy.deg2rad(2.0), pol=True)
+
 I1m = healpy.gnomview(Is, rot=(180, 0.0, 0.0),
     reso=2.0, xsize=200, ysize=200,
     no_plot=True, return_projected_map=True)
@@ -50,13 +33,13 @@ U1m = healpy.gnomview(Us, rot=(180, 0.0, 0.0),
     reso=2.0, xsize=200, ysize=200,
     no_plot=True, return_projected_map=True)
 
-I2m = healpy.gnomview(I2, rot=(180, 0.0, 0.0),
+I2m = healpy.gnomview(Idata, rot=(180, 0.0, 0.0),
     reso=2.0, xsize=200, ysize=200,
     no_plot=True, return_projected_map=True)
-Q2m = healpy.gnomview(Q2, rot=(180, 0.0, 0.0),
+Q2m = healpy.gnomview(Qdata, rot=(180, 0.0, 0.0),
     reso=2.0, xsize=200, ysize=200,
     no_plot=True, return_projected_map=True)
-U2m = healpy.gnomview(U2, rot=(180, 0.0, 0.0),
+U2m = healpy.gnomview(Udata, rot=(180, 0.0, 0.0),
     reso=2.0, xsize=200, ysize=200,
     no_plot=True, return_projected_map=True)
 
@@ -86,5 +69,5 @@ plt.colorbar(imU2, ax=axes[1][2])
 
 fig.tight_layout()
 
-#plt.show()
-plt.savefig(plotpath)
+plt.show()
+#plt.savefig(plotpath)
