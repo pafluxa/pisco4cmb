@@ -54,7 +54,10 @@ if(USE_CUDA)
   find_package(CUDA REQUIRED)
   set(CUDA_SEPARABLE_COMPILATION ON)
   # instruct nvcc to use fPIC for separate compilation of CUDA objects
-  set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS}; --compiler-options -fPIC)
+  set(CUDA_NVCC_FLAGS 
+    ${CUDA_NVCC_FLAGS}; 
+    --maxrregcount 32
+    --compiler-options -fPIC)
 endif()
 # enable beam interpolation when calculating the convolution
 # roughly doubles the time taken by the gpu routine!
@@ -71,11 +74,11 @@ endif()
 if(USE_CUDA)
     cuda_add_library(pisco SHARED
         src/Sky/sky.cpp
+        src/SkyMap/skymap.cpp
         src/Scan/scan.cpp
         src/Bpoint/bpoint.cpp
         src/Bpoint/ElapsedTime.cpp
         src/Bpoint/jpl_eph.cpp
-        src/Mapping/mapping_routines.cpp
         src/Polbeam/polbeam.cpp
         src/Sphtrigo/sphtrigo.cpp
         src/GpuConvolver/gpuconvolver.cu
@@ -85,11 +88,11 @@ if(USE_CUDA)
 else()
     add_library(pisco SHARED
         src/Sky/sky.cpp
+        src/SkyMap/skymap.cpp
         src/Scan/scan.cpp
         src/Bpoint/bpoint.cpp
         src/Bpoint/ElapsedTime.cpp
         src/Bpoint/jpl_eph.cpp
-        src/Mapping/mapping_routines.cpp
         src/Polbeam/polbeam.cpp
         src/Sphtrigo/sphtrigo.cpp)
 endif()
@@ -107,12 +110,11 @@ target_include_directories(pisco PUBLIC
 # compile wholesky simulation executable
 if(USE_CUDA)
   cuda_add_executable(simulate_wholesky_scan.x src/cuda_sim_wholesky_scan.cpp)
-  cuda_add_executable(simulate_pointsource_scan.x src/cuda_sim_pointsource_scan.cpp)
+#  cuda_add_executable(simulate_pointsource_scan.x src/cuda_sim_pointsource_scan.cpp)
 else()
   add_executable(simulate_wholesky_scan.x src/sim_wholesky_scan.cpp)
 endif()
 target_include_directories(simulate_wholesky_scan.x PRIVATE src/)
-target_include_directories(simulate_pointsource_scan.x PRIVATE src/)
 target_link_libraries(simulate_wholesky_scan.x 
     pisco
     ${SOFA_LIBRARIES}
@@ -121,12 +123,13 @@ target_link_libraries(simulate_wholesky_scan.x
     ${CHEALPIX_LIBRARIES}
     ${HEALPIX_LIBRARIES}
     ${CFITSIO_LIBRARIES})
-target_link_libraries(simulate_pointsource_scan.x 
-    pisco
-    ${SOFA_LIBRARIES}
-    ${OpenMP_LIBRARIES}
-    ${LAPACK_LIBRARIES}
-    ${CHEALPIX_LIBRARIES}
-    ${HEALPIX_LIBRARIES}
-    ${CFITSIO_LIBRARIES})
+#target_include_directories(simulate_pointsource_scan.x PRIVATE src/)
+#target_link_libraries(simulate_pointsource_scan.x 
+    #pisco
+    #${SOFA_LIBRARIES}
+    #${OpenMP_LIBRARIES}
+    #${LAPACK_LIBRARIES}
+    #${CHEALPIX_LIBRARIES}
+    #${HEALPIX_LIBRARIES}
+    #${CFITSIO_LIBRARIES})
 
