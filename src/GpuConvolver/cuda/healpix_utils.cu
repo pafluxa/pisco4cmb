@@ -94,11 +94,14 @@ ang2pix_ring_z_phi ( int nside_, double z, double phi, double sth )
     int ir = jp+jm+1; /* ring number counted from the closest pole */
     int ip = __double2int_rd(tt*ir); /* in {1,4*ir-1} */
     //ip = cudachealpix_imodulo(ip,4*ir);
-
+    int r1 = z > 0 ? 2*ir*(ir-1) + ip : 12*nside_*nside_ - 2*ir*(ir+1) + ip;;
+    return r1;
+    /*
     if (z>0)
       return 2*ir*(ir-1) + ip;
     else
       return 12*nside_*nside_ - 2*ir*(ir+1) + ip;
+    */
     }
 }
 
