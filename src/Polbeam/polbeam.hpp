@@ -69,7 +69,7 @@ class PolBeam
         int  nside;
         long nPixels;
 
-        Healpix_Base* hpxBase;
+        Healpix_Base hpxBase;
 
         char enabledDets;
 

@@ -12,7 +12,7 @@ PolBeam::PolBeam
 (
     int _nside, long _nPixels, 
     double _epsilon, char _enabledDets 
-)
+) : hpxBase(_nside, RING, SET_NSIDE)
 /*
  * PolBeam constructor.
  * 
@@ -27,9 +27,10 @@ PolBeam::PolBeam
     nPixels = _nPixels;
     epsilon = _epsilon;
     enabledDets = _enabledDets;
-    std::cerr << "DEBUG: building polbeam with dets " << enabledDets << " detectors." << std::endl;
-    hpxBase = new Healpix_Base(nside, RING, SET_NSIDE);
-    pointing p = hpxBase->pix2ang(nPixels);
+    std::cerr 
+        << "DEBUG: building polbeam with dets " 
+        << enabledDets << " detectors." << std::endl;
+    pointing p = hpxBase.pix2ang(nPixels);
     rhoMax = p.theta;
     
     alloc_buffers();
@@ -53,7 +54,8 @@ void PolBeam::alloc_buffers()
     size_t buffSize = sizeof(float)*nPixels;
     if(enabledDets == 'a' || enabledDets == 'p')
     {
-        std::cerr << "DEBUG: allocating beams for detector a." << std::endl;
+        std::cerr 
+            << "DEBUG: allocating beams for detector a." << std::endl;
         aBeams[0] = (float*)malloc(buffSize);
         aBeams[1] = (float*)malloc(buffSize);
         aBeams[2] = (float*)malloc(buffSize);
@@ -65,7 +67,8 @@ void PolBeam::alloc_buffers()
     }
     if(enabledDets == 'b' || enabledDets == 'p')
     {
-        std::cerr << "DEBUG: allocating beams for detector b." << std::endl;
+        std::cerr 
+            << "DEBUG: allocating beams for detector b." << std::endl;
         bBeams[0] = (float*)malloc(buffSize);
         bBeams[1] = (float*)malloc(buffSize);
         bBeams[2] = (float*)malloc(buffSize);
@@ -318,7 +321,7 @@ void PolBeam::make_unpol_gaussian_elliptical_beams
     double rho, sig, val;
     for(int bpix = 0; bpix < nPixels; bpix++)
     {
-        pointing bp = hpxBase->pix2ang(bpix);
+        pointing bp = hpxBase.pix2ang(bpix);
         rho = bp.theta;
         sig = bp.phi;
         val = exp(-(a*cos(sig)*cos(sig)

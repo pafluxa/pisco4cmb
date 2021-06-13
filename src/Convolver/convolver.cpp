@@ -96,7 +96,7 @@ void Convolver::beam_times_sky(
     // find sky pixels around beam center, up to beam.rhoMax
     rmax = beam->get_rho_max();
     pointing sc(M_PI_2 - dec_bc, ra_bc);
-    sky->hpxBase->query_disc(sc, rmax, intraBeamRanges);
+    sky->hpxBase.query_disc(sc, rmax, intraBeamRanges);
     // sky times beam multiplication loop
     data_a = 0.0;
     data_b = 0.0;
@@ -108,7 +108,7 @@ void Convolver::beam_times_sky(
         for(skyPix = range_begin; skyPix < range_end; skyPix++)
         {
             // get pointing of sky pixel
-            pointing sp = sky->hpxBase->pix2ang(skyPix);
+            pointing sp = sky->hpxBase.pix2ang(skyPix);
             ra_pix = sp.phi;
             dec_pix = M_PI/2.0 - sp.theta;
             // safety initializers
@@ -128,7 +128,7 @@ void Convolver::beam_times_sky(
             std::memset(beam_b, 0.0, sizeof(double)*3);
             // interpolate beam at (rho,sigma)
             pointing bp(rho, sigma);
-            beam->hpxBase->get_interpol(bp, neigh, wgh);
+            beam->hpxBase.get_interpol(bp, neigh, wgh);
             for(int b=0; b < 3; b++)
             {
                 // keep track of the sum of weigths

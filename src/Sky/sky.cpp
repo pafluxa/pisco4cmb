@@ -6,11 +6,10 @@ Sky::Sky(
 	const float* I,  
 	const float* Q, 
     const float* U, 
-	const float* V)
+	const float* V) : hpxBase(_nside, RING, SET_NSIDE)
 {
     nside = _nside;
-    nPixels = 12*nside*nside;
-    hpxBase = new Healpix_Base(nside, RING, SET_NSIDE);
+    nPixels = 12 * nside * nside;
 	sI = I;
 	sQ = Q;
 	sU = U;

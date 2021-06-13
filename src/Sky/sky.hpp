@@ -23,7 +23,7 @@ class Sky
         int get_nside (void) const { return nside; };
         unsigned long size (void) const { return nPixels; };
 
-		Healpix_Base* hpxBase;
+		Healpix_Base hpxBase;
 		
         // constant pointers to buffers
 		const float* sI;

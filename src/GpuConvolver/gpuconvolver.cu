@@ -91,6 +91,9 @@ GPUConvolver::GPUConvolver(Scan& scan, CUDACONV::RunConfig cfg)
     CUDA_ERROR_CHECK(
         cudaMalloc((void **)&resultGPU, resultBufferSize)
     );
+    
+    // set device to prefer L1 cache
+    cudaDeviceSetCacheConfig(cudaFuncCachePreferL1);
 }
 
 GPUConvolver::~GPUConvolver()
@@ -229,7 +232,7 @@ void GPUConvolver::exec_convolution(
             // pointing direction in the Scan
             rangeset<int> intraBeamRanges;
             pointing sc(M_PI_2 - dec_coords[s + k], ra_coords[s + k]);
-            sky->hpxBase->query_disc(sc, rmax, intraBeamRanges);
+            sky->hpxBase.query_disc(sc, rmax, intraBeamRanges);
             // Flatten the pixel range list. 
             idx = 0;
             for(int r = 0; r < intraBeamRanges.nranges(); r++) 
@@ -288,7 +291,7 @@ void GPUConvolver::exec_convolution(
         }
         // send pointing to gpu.
         CUDA_ERROR_CHECK(
-            cudaMemcpyAsync(
+            cudaMemcpy(
                 ptgBufferGPU,
                 ptgBuffer,
                 ptgBufferSize,
