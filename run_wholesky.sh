@@ -1,6 +1,7 @@
 #!/bin/bash
-TAG="256-sky_512-beam_offsetreflector-pair-cuda"
-nside=128
+TAG="test"
+nsideIn=256
+nsideOut=128
 beamnside=2048
 beamfwhm_deg=0.6604
 scan=wholesky 
@@ -32,12 +33,12 @@ cp data/beams/offset_ref/hpx_tilde_beams_det_a.txt \
 cp data/beams/offset_ref/hpx_tilde_beams_det_b.txt \
   "output/beam_b.txt" || exit 1
 # build sky
-python scripts/create_cmb.py $nside || exit 1
+python scripts/create_cmb.py $nsideIn || exit 1
+cp data/cls/cl_data.csv output/ || exit 1
 mv input_dl.png output/ || exit 1
 mv input_maps.png output/ || exit 1
 mv input_ps.png output/ || exit 1
 mv cmb.txt output/ || exit 1
-cp data/cls/cl_data.csv output/ || exit 1
 mv cl_data.csv output/ || exit 1
 # execute simulation
 echo "running detector "$det" for wholesky simulation "$TAG
@@ -48,8 +49,8 @@ time "./build/"$program \
   -o "output/MAPS_det_"$det"_scan_"$scan".map" \
   -t f \
   -a output/beam_a.txt \
-  -b output/beam_b.txt \
-   > "output/STDOUT_det_"$det"_scan_"$scan".txt" || exit 1
+  -b output/beam_b.txt 
+#   > "output/STDOUT_det_"$det"_scan_"$scan".txt" || exit 1
 # move dumped beams to output folder
 mv dump_detector_a.txt output/
 mv dump_detector_b.txt output/
