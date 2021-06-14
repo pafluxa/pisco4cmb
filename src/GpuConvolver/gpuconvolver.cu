@@ -1,7 +1,5 @@
 #include <omp.h>
-#include <cstring>
-#include <cuda.h>
-#include <cuda_runtime.h>
+#include <stdexcept>
 
 #include "GpuConvolver/gpuconvolver.hpp"
 
@@ -12,108 +10,164 @@ gpuAssert(cudaError_t code, const char file[], int line, bool abort=true)
 {                                                                                                             
     if (code != cudaSuccess)                                                                                   
     {                                                                                                          
-        fprintf(stderr,
-        "GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);                          
+        std::cerr << "ERROR (GPUassert): " 
+            << "A CUDA related error was encountered. "
+            << "Error is: " << cudaGetErrorString(code) << ", triggered "
+            << "from file " << file 
+            << " at line " << line << std::endl;                          
         if(abort)
         { 
+            std::cerr << "FATAL (GPUassert): " 
+                << "program was aborted." << std::endl;
             exit(-1); 
-        }                                                                                     
+        }  
+        else
+        {
+            std::cerr << "WARNING (GPUassert):"
+                << "press any key to continue." << std::endl;
+            getchar();
+        }
     }                                                                                                          
 }                                                                                                             
 
-GPUConvolver::GPUConvolver(Scan& scan, CUDACONV::RunConfig cfg)
+GPUConvolver::GPUConvolver(CUDACONV::RunConfig _cfg)
 {
-    nsamples = scan.get_nsamples();
+    cfg = _cfg;
     hasSky = false;
     hasBeam = false;
-    
+    hasValidConfig = false;
+    /* Calculate size of all buffers that will be used. */
     pixPerDisc = cfg.pixelsPerDisc;
-    if(pixPerDisc > cfg.MAX_PIXELS_PER_DISC)
-    {
-        std::cerr 
-          << "WARNING: too many pixels per disc. Using : " 
-          << cfg.MAX_PIXELS_PER_DISC << " pixels per disk." 
-          << std::endl;
-        pixPerDisc = cfg.MAX_PIXELS_PER_DISC;
-    }
-
     ptgPerConv = cfg.ptgPerConv;
-    if(ptgPerConv > cfg.MAX_PTGS_PER_CONV)
-    {
-        std::cerr 
-          << "WARNING: too many pointings per convolution. Using : " 
-          << cfg.MAX_PTGS_PER_CONV << " pointings per convolution." 
-          << std::endl;
-        ptgPerConv = cfg.MAX_PTGS_PER_CONV;
-    }
     // 2 x size because there are two detectors. This is a small array
     // anyways, not worth to go cheap on memory
     resultBufferSize = 2 * ptgPerConv * sizeof(float);
     ptgBufferSize = N_POINTING_COORDS * ptgPerConv * sizeof(float);
     // buffer holding all pixels seen by a particular pointing.
     // this array can get pretty large so be careful
+    skyPixelsInBeamBufferSize = ptgPerConv * pixPerDisc;
+    skyPixelsInBeamBufferSize *= sizeof(int);
+    // array with the size of seen sky pixels
     nPixelInDiscBufferSize = ptgPerConv * sizeof(int);
-    skyPixelsInBeamBufferSize = ptgPerConv * pixPerDisc * sizeof(int);
-    
+    /* Check that required memory is below the user limit. */
+    const int ns = cfg.nStreams;
+    size_t reqMemory = ns * (resultBufferSize 
+      + ptgBufferSize + nPixelInDiscBufferSize 
+      + skyPixelsInBeamBufferSize);
+    // check required memory is within limits set by user.
+    hasValidConfig = (reqMemory < cfg.maxMemUsage) && (cfg.nStreams > 0);
+    std::cerr << reqMemory << std::endl;
+    std::cerr << cfg.maxMemUsage << std::endl;
+    std::cerr << cfg.nStreams << std::endl;
+    configure_execution();
+    allocate_buffers();
+}
+
+void GPUConvolver::configure_execution(void)
+{
+    if(cfg.nStreams > CUDACONV_MAXSTREAMS)
+    {
+        hasValidConfig = false;
+        std::cerr << "MESSAGE (cudaconv): " 
+            << cfg.nStreams << " must be lower than " 
+            << CUDACONV_MAXSTREAMS << std::endl;
+    }
+    if(!hasValidConfig)
+    {
+        throw std::invalid_argument(
+            "ERROR (GPUConvolver): invalid configuration.");
+    }
+    cudaDeviceProp prop;
+    CUDA_ERROR_CHECK(cudaGetDeviceProperties(&prop, cfg.deviceId));
+    #ifdef CUDACONV_DEBUG
+    std::cerr << "MESSAGE (GPUConvolver): "
+        << "Executing on device id: " << prop.name << std::endl;
+    #endif
+    CUDA_ERROR_CHECK(cudaSetDevice(cfg.deviceId));
+    /* Create events to measure time as well as execution streams. */
+    CUDA_ERROR_CHECK(cudaEventCreate(&startEvent));
+    CUDA_ERROR_CHECK(cudaEventCreate(&stopEvent));
+    for(int i = 0; i < cfg.nStreams; i++)
+    {
+        CUDA_ERROR_CHECK(cudaStreamCreate(&streams[i]));
+    }
+}
+
+void GPUConvolver::allocate_buffers(void)
+{
+    for(int i = 0; i < cfg.nStreams; i++)
+    {
     // allocate buffers to store partial pointing
-    CUDA_ERROR_CHECK(
-        cudaMallocHost(
-            (void **)&ptgBuffer, 
-            ptgBufferSize)
-    );
-    CUDA_ERROR_CHECK(
-        cudaMalloc(
-            (void **)&ptgBufferGPU, 
-            ptgBufferSize)
-    );
-    // to store intra-beam sky pixels (host)
-    CUDA_ERROR_CHECK(
-        cudaMallocHost((void **)&skyPixelsInBeam, 
+        CUDA_ERROR_CHECK(
+            cudaMallocHost(
+                (void **)&(ptgBuffer[i]), ptgBufferSize)
+        );
+        CUDA_ERROR_CHECK(
+            cudaMalloc(
+                (void **)&(ptgBufferGPU[i]), ptgBufferSize)
+        );
+        // to store intra-beam sky pixels (host)
+        CUDA_ERROR_CHECK(
+            cudaMallocHost((void **)&(skyPixelsInBeam[i]), 
             skyPixelsInBeamBufferSize)
-    );
-    // to store intra-beam sky pixels (GPU)
-    CUDA_ERROR_CHECK(
-        cudaMalloc((void **)&skyPixelsInBeamGPU, 
-            skyPixelsInBeamBufferSize)
-    );
-    // to store the number of pixels in every disc (host)
-    CUDA_ERROR_CHECK(
-        cudaMallocHost((void **)&nPixelsInDisc, nPixelInDiscBufferSize)
-    );
-    // to store the number of pixels in every disc (GPU)
-    CUDA_ERROR_CHECK(
-        cudaMalloc((void **)&nPixelsInDiscGPU, nPixelInDiscBufferSize)
-    );
-    // to store the result of a partial convolution (GPU)
-    CUDA_ERROR_CHECK(
-        cudaMallocHost((void **)&result, resultBufferSize)
-    );
-    CUDA_ERROR_CHECK(
-        cudaMalloc((void **)&resultGPU, resultBufferSize)
-    );
-    
-    // set device to prefer L1 cache
-    cudaDeviceSetCacheConfig(cudaFuncCachePreferL1);
+        );
+        // to store intra-beam sky pixels (GPU)
+        CUDA_ERROR_CHECK(
+            cudaMalloc((void **)&(skyPixelsInBeamGPU[i]), 
+                skyPixelsInBeamBufferSize)
+        );
+        // to store the number of pixels in every disc (host)
+        CUDA_ERROR_CHECK(
+            cudaMallocHost((void **)&(nPixelsInDisc[i]), 
+            nPixelInDiscBufferSize)
+        );
+        // to store the number of pixels in every disc (GPU)
+        CUDA_ERROR_CHECK(
+            cudaMalloc((void **)&(nPixelsInDiscGPU[i]), 
+            nPixelInDiscBufferSize)
+        );
+        // to store the result of a partial convolution (GPU)
+        CUDA_ERROR_CHECK(
+            cudaMallocHost((void **)&(result[i]), 
+            resultBufferSize)
+        );
+        CUDA_ERROR_CHECK(
+            cudaMalloc((void **)&(resultGPU[i]), 
+            resultBufferSize)
+        );
+    }
+    std::cerr << "memory allocated." << std::endl;
 }
 
 GPUConvolver::~GPUConvolver()
 {
-    cudaFree(resultGPU);
-    cudaFreeHost(result);
-    cudaFree(nPixelsInDiscGPU);
-    cudaFreeHost(nPixelsInDisc);
-    cudaFree(skyPixelsInBeamGPU);
-    cudaFreeHost(skyPixelsInBeamGPU);
-    cudaFreeHost(ptgBuffer);
-    cudaFree(ptgBufferGPU);
-    
+    if(hasValidConfig)
+    {
+        CUDA_ERROR_CHECK((cudaEventDestroy(startEvent)));
+        CUDA_ERROR_CHECK((cudaEventDestroy(stopEvent)));
+        for(int i = 0; i < cfg.nStreams; ++i)
+        {
+            CUDA_ERROR_CHECK((cudaStreamDestroy(streams[i])));
+        }
+        for(int i = 0; i < cfg.nStreams; ++i)
+        {
+            CUDA_ERROR_CHECK(cudaFreeHost(result[i]));
+            CUDA_ERROR_CHECK(cudaFree(resultGPU[i]));
+            CUDA_ERROR_CHECK(cudaFreeHost(nPixelsInDisc[i]));
+            CUDA_ERROR_CHECK(cudaFree(nPixelsInDiscGPU[i]));
+            CUDA_ERROR_CHECK(cudaFreeHost(skyPixelsInBeam[i]));
+            CUDA_ERROR_CHECK(cudaFree(skyPixelsInBeamGPU[i]));
+            CUDA_ERROR_CHECK(cudaFreeHost(ptgBuffer[i]));
+            CUDA_ERROR_CHECK(cudaFree(ptgBufferGPU[i]));
+        }
+    }
     if(hasBeam)
     {
-        cudaFree(aBeamsGPU);
+        CUDA_ERROR_CHECK(cudaFree(aBeamsGPU));
     }
     if(hasSky)
     {
-        cudaFree(skyGPU);
+        CUDA_ERROR_CHECK(cudaFree(skyGPU));
     }
 }
 
@@ -146,6 +200,7 @@ void GPUConvolver::update_sky(Sky* sky)
             cudaMemcpyHostToDevice)
     );
     free(skyTransponsed);
+    std::cerr << "sky updated." << std::endl;
 }
 
 void GPUConvolver::update_beam(PolBeam* beam)
@@ -209,122 +264,147 @@ void GPUConvolver::update_beam(PolBeam* beam)
         );
     }
     free(transposedBeams);
+    std::cerr << "beams updated." << std::endl;
 }
 
 void GPUConvolver::exec_convolution(
-    CUDACONV::RunConfig cfg,
-    float* data_a, 
-    float* data_b,
+    float* data_a, float* data_b,
     Scan* scan, Sky* sky, PolBeam* beam)
 {
+    int k;
     int idx;
-    long nsamples = scan->get_nsamples();
-    double rmax = beam->get_rho_max();
+    int sidx;
+    int samp;
+    int strm;
+    long nsamples;
+    double rmax;
+    float ra;
+    float dec;
+    float pa;
     
-	const float* ra_coords = scan->get_ra_ptr();
+    nsamples = scan->get_nsamples();
+    rmax = beam->get_rho_max();
+	
+    const float* ra_coords = scan->get_ra_ptr();
 	const float* dec_coords = scan->get_dec_ptr();
 	const float* pa_coords = scan->get_pa_ptr();
-    for(long s = 0; s < nsamples; s += ptgPerConv) 
+    for(samp = 0; samp < nsamples; samp += cfg.nStreams * ptgPerConv) 
     { 
-        for(int k = 0; k < ptgPerConv; k++)
+        for(strm = 0; strm < cfg.nStreams; strm++)
         {
-            // Locate all sky pixels inside the beam for every 
-            // pointing direction in the Scan
-            rangeset<int> intraBeamRanges;
-            pointing sc(M_PI_2 - dec_coords[s + k], ra_coords[s + k]);
-            sky->hpxBase.query_disc(sc, rmax, intraBeamRanges);
-            // Flatten the pixel range list. 
-            idx = 0;
-            for(int r = 0; r < intraBeamRanges.nranges(); r++) 
+            // build data and send asynchronously
+            for(k = 0; k < ptgPerConv; k++)
             {
-                int ss = intraBeamRanges.ivbegin(r);
-                int ee = intraBeamRanges.ivend(r);
-                for(int ii = ss; ii < ee; ii++) 
+                // send dummy data
+                if(samp + strm * ptgPerConv + k > nsamples)
+                { 
+                    ptgBuffer[strm][N_POINTING_COORDS * k + 0] = 0.0;
+                    ptgBuffer[strm][N_POINTING_COORDS * k + 1] = 0.0;
+                    ptgBuffer[strm][N_POINTING_COORDS * k + 2] = 0.0;
+                    nPixelsInDisc[strm][k] = 0;
+                    skyPixelsInBeam[strm][k * pixPerDisc + 0] = 0;
+                }
+                else
                 {
-                    skyPixelsInBeam[k * pixPerDisc + idx] = ii;
-                    idx++;
+                    ra = ra_coords[samp + strm * ptgPerConv + k];
+                    dec = dec_coords[samp + strm * ptgPerConv + k];
+                    // Passed arguments are counterclockwise on the sky
+                    // while CMB requires clockwise arguments.
+                    pa = -pa_coords[samp + strm * ptgPerConv + k];
+                    ptgBuffer[strm][N_POINTING_COORDS * k + 0] = ra; 
+                    ptgBuffer[strm][N_POINTING_COORDS * k + 1] = dec; 
+                    ptgBuffer[strm][N_POINTING_COORDS * k + 2] = pa;
+                    // Locate all sky pixels inside the beam for every 
+                    // pointing direction in the scan
+                    rangeset<int> intraBeamRanges;
+                    pointing sc(
+                        M_PI_2 - dec_coords[samp + strm * ptgPerConv + k], 
+                        ra_coords[samp + strm * ptgPerConv + k]);
+                    sky->hpxBase.query_disc(sc, rmax, intraBeamRanges);
+                    // convert ranges to pixel list 
+                    idx = 0;
+                    for(int r = 0; r < intraBeamRanges.nranges(); r++) 
+                    {
+                        int ss = intraBeamRanges.ivbegin(r);
+                        int ee = intraBeamRanges.ivend(r);
+                        for(int ii = ss; ii < ee; ii++) 
+                        {
+                            sidx = k * pixPerDisc + idx;
+                            skyPixelsInBeam[strm][sidx] = ii;
+                            idx++;
+                        }
+                    }
+                    nPixelsInDisc[strm][k] = idx;
                 }
             }
-            nPixelsInDisc[k] = idx;
-        } 
-        // send sky pixels in beam to gpu.
-        CUDA_ERROR_CHECK(
-            cudaMemcpyAsync(
-                skyPixelsInBeamGPU,
-                skyPixelsInBeam,
-                skyPixelsInBeamBufferSize,
-                cudaMemcpyHostToDevice)
-        );
-        // send max pixel number per-disc to gpu.
-        CUDA_ERROR_CHECK
-        (
-            cudaMemcpyAsync(
-                nPixelsInDiscGPU,
-                nPixelsInDisc,
-                nPixelInDiscBufferSize,
-                cudaMemcpyHostToDevice)
-        );
-        for(int k = 0; k < ptgPerConv; k++)
-        {
-            // it is simpler to just send dummy data 
-            if(s + k > nsamples)
-            { 
-                ptgBuffer[N_POINTING_COORDS * k + 0] = 0.0;
-                ptgBuffer[N_POINTING_COORDS * k + 1] = 0.0;
-                ptgBuffer[N_POINTING_COORDS * k + 2] = 0.0;
-                // this is a dummy entry
-                ptgBuffer[N_POINTING_COORDS * k + 3] = 0.0;
-                idx = 0;
-                nPixelsInDisc[k] = 0;
-                skyPixelsInBeam[k * pixPerDisc + idx] = 0;
-            }
-            else
-            {
-                ptgBuffer[N_POINTING_COORDS * k + 0] = ra_coords[s + k]; 
-                ptgBuffer[N_POINTING_COORDS * k + 1] = dec_coords[s + k]; 
-                // Passed arguments are counterclockwise on the sky, while
-                // CMB requires clockwise arguments.
-                ptgBuffer[N_POINTING_COORDS * k + 2] = -pa_coords[s + k];
-                // this is a dummy entry
-                ptgBuffer[N_POINTING_COORDS * k + 3] = 0.0;
-            }
+            // send pointing to gpu asynchronously
+            CUDA_ERROR_CHECK(
+                cudaMemcpyAsync(
+                    ptgBufferGPU[strm],
+                    ptgBuffer[strm],
+                    ptgBufferSize,
+                    cudaMemcpyHostToDevice, streams[strm])
+            );
+            // send sky pixels in beam to gpu.
+            CUDA_ERROR_CHECK(
+                cudaMemcpyAsync(
+                    skyPixelsInBeamGPU[strm],
+                    skyPixelsInBeam[strm],
+                    skyPixelsInBeamBufferSize,
+                    cudaMemcpyHostToDevice, streams[strm])
+            );
+            // send max pixel number per-disc to gpu.
+            CUDA_ERROR_CHECK(
+                cudaMemcpyAsync(
+                    nPixelsInDiscGPU[strm],
+                    nPixelsInDisc[strm],
+                    nPixelInDiscBufferSize,
+                    cudaMemcpyHostToDevice, streams[strm])
+            );
+            // calculate partial convolution of beam and sky
+            CUDACONV::streamed_beam_times_sky(
+                cfg,
+                ptgBufferGPU[strm],
+                beam->get_nside(), beam->size(), 
+                aBeamsGPU, bBeamsGPU,
+                sky->get_nside(), skyGPU, 
+                skyPixelsInBeamGPU[strm], nPixelsInDiscGPU[strm],
+                streams[strm],
+                resultGPU[strm]);
         }
-        // send pointing to gpu.
-        CUDA_ERROR_CHECK(
-            cudaMemcpy(
-                ptgBufferGPU,
-                ptgBuffer,
-                ptgBufferSize,
-                cudaMemcpyHostToDevice)
-        );
-
-        // calculate partial convolution of beam and sky
-        CUDACONV::beam_times_sky(
-            cfg,
-            ptgBufferGPU,
-            beam->get_nside(), beam->size(), 
-            aBeamsGPU, bBeamsGPU,
-            sky->get_nside(), skyGPU, 
-            skyPixelsInBeamGPU, nPixelsInDiscGPU,
-            resultGPU);
-        // bring the data from GPU back to the host buffer.
-        CUDA_ERROR_CHECK
-        (
-            cudaMemcpy(
-                result,
-                resultGPU,
-                resultBufferSize,
-                cudaMemcpyDeviceToHost)
-        );
-        for(int k = 0; k < ptgPerConv; k++)
-        {   
-            if(beam->enabledDets == 'a' || beam->enabledDets == 'p')
-            {
-                data_a[s + k] = result[2*k + 0];
-            }
-            if(beam->enabledDets == 'b' || beam->enabledDets == 'p')
-            {
-                data_b[s + k] = result[2*k + 1];
+        // execute work and fetch results asynchronously
+        for(strm = 0; strm < cfg.nStreams; strm++)
+        {
+            // bring the data from GPU back to the host buffer.
+            CUDA_ERROR_CHECK
+            (
+                cudaMemcpyAsync(
+                    result[strm],
+                    resultGPU[strm],
+                    resultBufferSize,
+                    cudaMemcpyDeviceToHost, 
+                    streams[strm])
+            );
+            // wait for stream transfering memory back to host
+            cudaStreamSynchronize(streams[strm]);
+            // write result to host buffers
+            for(int k = 0; k < ptgPerConv; k++)
+            {   
+                if(samp + strm * ptgPerConv + k < nsamples)
+                {
+                    if(beam->enabledDets == 'a' 
+                       || beam->enabledDets == 'p')
+                    {
+                        data_a[samp + strm * ptgPerConv + k] = 
+                            result[strm][2*k + 0];
+                    }
+                    if(beam->enabledDets == 'b' 
+                       || beam->enabledDets == 'p')
+                    {
+                        data_b[samp + strm * ptgPerConv + k] = 
+                            result[strm][2*k + 1];
+                    }
+                }
             }
         }
     }

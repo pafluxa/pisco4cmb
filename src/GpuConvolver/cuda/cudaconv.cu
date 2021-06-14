@@ -204,3 +204,38 @@ CUDACONV::beam_times_sky(
     cudaUnbindTexture(tex_skyGPU);
     #endif
 }
+
+extern void 
+CUDACONV::streamed_beam_times_sky( 
+    CUDACONV::RunConfig cfg, 
+	// pointing
+    float* ptgBufferGPU, 
+	// beams
+	int bnside, int bnpixels, 
+    float* beamsAGPU, float* beamsBGPU, 
+	// sky
+	int skynside, float* skyGPU, 
+	// disc of pixels inside the beam
+	int* intraBeamPixelsGPU, int* maxIntraBeamPixGPU,
+    // stream to run the kernel
+    cudaStream_t stream,
+	// output
+	float *dataGPU)
+{
+    dim3 gridcfg(cfg.gridSizeX, cfg.gridSizeY, 1);
+    dim3 blockcfg(cfg.blockSizeX, cfg.blockSizeY, 1);
+    size_t shMemBufferSize = 2 * cfg.blockSizeX * sizeof(double);
+    
+    // call cuda kernel
+    kernel_beam_times_sky
+    <<<gridcfg, blockcfg, shMemBufferSize, stream>>>
+    (
+        cfg.blockSizeX, 
+        cfg.ptgPerConv, ptgBufferGPU,
+        bnside, bnpixels, beamsAGPU, beamsBGPU, 
+        skynside, skyGPU, 
+        cfg.pixelsPerDisc, intraBeamPixelsGPU, maxIntraBeamPixGPU,
+        dataGPU
+    );
+}
+

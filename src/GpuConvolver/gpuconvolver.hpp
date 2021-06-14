@@ -13,12 +13,13 @@
 #define N_POINTING_COORDS 4
 #define N_SKY_COMP 4
 #define N_POLBEAMS 4
+#define CUDACONV_MAXSTREAMS (8)
 
 class GPUConvolver
 {
     public:
     
-        GPUConvolver(Scan& scan, CUDACONV::RunConfig);
+        GPUConvolver(CUDACONV::RunConfig);
        ~GPUConvolver();
         
         /* Transfers beams from host to device. First call also 
@@ -35,16 +36,17 @@ class GPUConvolver
          * both) will be used ('a', 'b' or 'p' for pair).
          */
 		void exec_convolution( 
-            CUDACONV::RunConfig c, 
             float* data_a,
             float* data_b,
             Scan* scan, Sky* sky, PolBeam* beam);
 		
     private:
-
+        CUDACONV::RunConfig cfg;
+        
 		int nsamples;
 		bool hasBeam;
 		bool hasSky;
+        bool hasValidConfig;
         int pixPerDisc;
         int ptgPerConv;
         /* Sky has 4 Stokes parameters (I, Q, U, V)*/
@@ -55,21 +57,29 @@ class GPUConvolver
 		float* bBeamsGPU;
         size_t beamBufferSize;
         /* buffers to store number of intra-beam sky pixels. */
-		int* nPixelsInDisc;
-		int* nPixelsInDiscGPU;
+		int* nPixelsInDisc[CUDACONV_MAXSTREAMS];
+		int* nPixelsInDiscGPU[CUDACONV_MAXSTREAMS];
         size_t nPixelInDiscBufferSize;
         /* buffers to store intra-beam sky pixels. */
-        int* skyPixelsInBeam;
-		int* skyPixelsInBeamGPU;
+        int* skyPixelsInBeam[CUDACONV_MAXSTREAMS];
+		int* skyPixelsInBeamGPU[CUDACONV_MAXSTREAMS];
         size_t skyPixelsInBeamBufferSize;
         /* buffer to store pointing*/
-        float* ptgBuffer;
-        float* ptgBufferGPU;
+        float* ptgBuffer[CUDACONV_MAXSTREAMS];
+        float* ptgBufferGPU[CUDACONV_MAXSTREAMS];
         size_t ptgBufferSize;
         /* buffer to store result.*/
-        float* result;     
-        float* resultGPU;     
+        float* result[CUDACONV_MAXSTREAMS];     
+        float* resultGPU[CUDACONV_MAXSTREAMS];     
         size_t resultBufferSize;
+
+        cudaEvent_t startEvent;
+        cudaEvent_t stopEvent;
+        cudaStream_t streams[CUDACONV_MAXSTREAMS];
+        
+        void allocate_buffers(void);
+        
+        void configure_execution(void);
 };
 
 #endif
