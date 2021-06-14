@@ -18,7 +18,7 @@
 #include <pointing.h>
 
 #define NSIDE_SKY (256)
-#define NSIDE_SKY_OUT (128)
+#define NSIDE_SKY_OUT (256)
 #define NPIXELS_SKY (12 * (NSIDE_SKY) * (NSIDE_SKY))
 #define NPIXELS_SKY_OUT (12 * (NSIDE_SKY_OUT) * (NSIDE_SKY_OUT))
 /** how to calculate the number of pixels below
@@ -160,13 +160,16 @@ int main(int argc, char** argv )
     Scan scan(NSAMPLES, ra, dec, psi);
     // initialize convolver object
     CUDACONV::RunConfig cfg;
+    cfg.nStreams = 4;
+    cfg.maxMemUsage = size_t(8 * 1e9);
+    cfg.deviceId = 0;
     cfg.gridSizeX = 512;
     cfg.gridSizeY = 1;
     cfg.blockSizeX = 64;
     cfg.blockSizeY = 1;
-    cfg.ptgPerConv = 8192 * 4;
+    cfg.ptgPerConv = 8192 * 16;
     cfg.pixelsPerDisc = 2000;
-    GPUConvolver cconv(scan, cfg);
+    GPUConvolver cconv(cfg);
     cconv.update_sky(&sky);
     cconv.update_beam(&beam);
     // setup detetctor angle arays
@@ -181,7 +184,6 @@ int main(int argc, char** argv )
         start = std::chrono::steady_clock::now();
         // compute convolution for detector A and B of PSB
         cconv.exec_convolution(
-            cfg, 
             psbDataA, psbDataB, 
             &scan, &sky, &beam);
         stop = std::chrono::steady_clock::now();
