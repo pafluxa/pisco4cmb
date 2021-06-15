@@ -73,8 +73,7 @@ class GPUConvolver
         float* resultGPU[CUDACONV_MAXSTREAMS];     
         size_t resultBufferSize;
 
-        cudaEvent_t startEvent;
-        cudaEvent_t stopEvent;
+        cudaEvent_t streamWait[CUDACONV_MAXSTREAMS];
         cudaStream_t streams[CUDACONV_MAXSTREAMS];
         
         void allocate_buffers(void);

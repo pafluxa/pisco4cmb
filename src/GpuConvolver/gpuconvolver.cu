@@ -84,13 +84,18 @@ void GPUConvolver::configure_execution(void)
     std::cerr << "MESSAGE (GPUConvolver): "
         << "Executing on device id: " << prop.name << std::endl;
     //#endif
+    /* Set device to the one specified by the user. */
     CUDA_ERROR_CHECK(cudaSetDevice(cfg.deviceId));
-    /* Create events to measure time as well as execution streams. */
-    CUDA_ERROR_CHECK(cudaEventCreate(&startEvent));
-    CUDA_ERROR_CHECK(cudaEventCreate(&stopEvent));
+    /* Create events and streams for pipelined convolution. */
     for(int i = 0; i < cfg.nStreams; i++)
     {
-        CUDA_ERROR_CHECK(cudaStreamCreate(&streams[i]));
+        CUDA_ERROR_CHECK
+        (  
+            cudaStreamCreate(&(streams[i]))
+        );
+        CUDA_ERROR_CHECK(
+            cudaEventCreate(&(streamWait[i]))
+        );
     }
 }
 
@@ -110,7 +115,7 @@ void GPUConvolver::allocate_buffers(void)
         // to store intra-beam sky pixels (host)
         CUDA_ERROR_CHECK(
             cudaMallocHost((void **)&(skyPixelsInBeam[i]), 
-            skyPixelsInBeamBufferSize)
+                skyPixelsInBeamBufferSize)
         );
         // to store intra-beam sky pixels (GPU)
         CUDA_ERROR_CHECK(
@@ -120,21 +125,21 @@ void GPUConvolver::allocate_buffers(void)
         // to store the number of pixels in every disc (host)
         CUDA_ERROR_CHECK(
             cudaMallocHost((void **)&(nPixelsInDisc[i]), 
-            nPixelInDiscBufferSize)
+                nPixelInDiscBufferSize)
         );
         // to store the number of pixels in every disc (GPU)
         CUDA_ERROR_CHECK(
             cudaMalloc((void **)&(nPixelsInDiscGPU[i]), 
-            nPixelInDiscBufferSize)
+                nPixelInDiscBufferSize)
         );
         // to store the result of a partial convolution (GPU)
         CUDA_ERROR_CHECK(
             cudaMallocHost((void **)&(result[i]), 
-            resultBufferSize)
+                resultBufferSize)
         );
         CUDA_ERROR_CHECK(
             cudaMalloc((void **)&(resultGPU[i]), 
-            resultBufferSize)
+                resultBufferSize)
         );
     }
     std::cerr << "memory allocated." << std::endl;
@@ -144,11 +149,16 @@ GPUConvolver::~GPUConvolver()
 {
     if(hasValidConfig)
     {
-        CUDA_ERROR_CHECK((cudaEventDestroy(startEvent)));
-        CUDA_ERROR_CHECK((cudaEventDestroy(stopEvent)));
         for(int i = 0; i < cfg.nStreams; ++i)
         {
-            CUDA_ERROR_CHECK((cudaStreamDestroy(streams[i])));
+            CUDA_ERROR_CHECK
+            (
+                cudaStreamDestroy(streams[i])
+            );
+            CUDA_ERROR_CHECK
+            (
+                cudaEventDestroy(streamWait[i])
+            );
         }
         for(int i = 0; i < cfg.nStreams; ++i)
         {
@@ -272,20 +282,11 @@ void GPUConvolver::exec_convolution(
     float* data_a, float* data_b,
     Scan* scan, Sky* sky, PolBeam* beam)
 {
-    int k;
-    int idx;
-    int sidx;
     int samp;
     int strm;
-    
     long nsamples;
-    double rmax;
-    float ra;
-    float dec;
-    float pa;
-    int nCompletedStreams;
-    bool allStreamsCompleted;
-    
+    double rmax; 
+
     nsamples = scan->get_nsamples();
     rmax = beam->get_rho_max();
 	
@@ -295,29 +296,43 @@ void GPUConvolver::exec_convolution(
     for(samp = 0; samp < nsamples; samp += cfg.nStreams * ptgPerConv) 
     { 
         std::cerr << samp << "/" << nsamples << std::endl;
+        
         for(strm = 0; strm < cfg.nStreams; strm++)
-        {
-            // build data and send asynchronously
-            std::cerr << "stream: " << strm << " filling pointing and pixels-in-beam data." << std::endl;
-            for(k = 0; k < ptgPerConv; k++)
+        { 
+            std::cerr 
+                << "stream: " << strm 
+                << " filling buffers for pointing and pixels-in-beam." 
+                << std::endl;
+            #pragma omp parallel default(shared)
+            // begin parallel region
             {
+            float ra;
+            float dec;
+            float pa;
+            
+            int idx;
+            int sidx;
+            
+            #pragma omp for schedule(static)
+            for(int k = 0; k < ptgPerConv; k++)
+            {
+                int aidx = samp + strm * ptgPerConv + k;
                 // send dummy data
-                if(samp + strm * ptgPerConv + k >= nsamples)
+                if(aidx >= nsamples)
                 { 
-                    std::cerr << "stream: " << strm << " filling dummy data." << std::endl;
                     ptgBuffer[strm][N_POINTING_COORDS * k + 0] = 0.0;
                     ptgBuffer[strm][N_POINTING_COORDS * k + 1] = 0.0;
                     ptgBuffer[strm][N_POINTING_COORDS * k + 2] = 0.0;
-                    nPixelsInDisc[strm][k] = 512;
-                    skyPixelsInBeam[strm][k * pixPerDisc + 0] = k;
+                    nPixelsInDisc[strm][k] = 0;
+                    skyPixelsInBeam[strm][k * pixPerDisc + 0] = 0;
                 }
                 else
                 {
-                    ra = ra_coords[samp + strm * ptgPerConv + k];
-                    dec = dec_coords[samp + strm * ptgPerConv + k];
+                    ra = ra_coords[aidx];
+                    dec = dec_coords[aidx];
                     // Passed arguments are counterclockwise on the sky
                     // while CMB requires clockwise arguments.
-                    pa = -pa_coords[samp + strm * ptgPerConv + k];
+                    pa = -pa_coords[aidx];
                     ptgBuffer[strm][N_POINTING_COORDS * k + 0] = ra; 
                     ptgBuffer[strm][N_POINTING_COORDS * k + 1] = dec; 
                     ptgBuffer[strm][N_POINTING_COORDS * k + 2] = pa;
@@ -325,8 +340,7 @@ void GPUConvolver::exec_convolution(
                     // pointing direction in the scan
                     rangeset<int> intraBeamRanges;
                     pointing sc(
-                        M_PI_2 - dec_coords[samp + strm * ptgPerConv + k], 
-                        ra_coords[samp + strm * ptgPerConv + k]);
+                        M_PI_2 - dec_coords[aidx], ra_coords[aidx]);
                     sky->hpxBase.query_disc(sc, rmax, intraBeamRanges);
                     // convert ranges to pixel list 
                     idx = 0;
@@ -344,35 +358,60 @@ void GPUConvolver::exec_convolution(
                     nPixelsInDisc[strm][k] = idx;
                 }
             }
-            std::cerr << "stream: " << strm << " copying ptgBuffer to gpu" << std::endl;
+            // end parallel region
+            }
+        }
+        // do all the gpu stuff
+        for(strm = 0; strm < cfg.nStreams; strm++)
+        {
+            std::cerr 
+                << "stream: " << strm 
+                << " copying ptgBuffer to gpu" << std::endl;
             // send pointing to gpu asynchronously
-            CUDA_ERROR_CHECK(
+            //CUDA_ERROR_CHECK(
                 cudaMemcpyAsync(
                     ptgBufferGPU[strm],
                     ptgBuffer[strm],
                     ptgBufferSize,
-                    cudaMemcpyHostToDevice, streams[strm])
-            );
-            std::cerr << "stream: " << strm << " copying skyPixelsInBeam to gpu" << std::endl;
-            // send sky pixels in beam to gpu.
-            CUDA_ERROR_CHECK(
-                cudaMemcpyAsync(
-                    skyPixelsInBeamGPU[strm],
-                    skyPixelsInBeam[strm],
-                    skyPixelsInBeamBufferSize,
-                    cudaMemcpyHostToDevice, streams[strm])
-            );
-            std::cerr << "stream: " << strm << " copying nPixelsInDisc to gpu" << std::endl;
+                    cudaMemcpyHostToDevice, streams[strm]);
+            //);
+        }
+        for(strm = 0; strm < cfg.nStreams; strm++)
+        {
+            std::cerr
+                << "stream: " << strm 
+                << " copying nPixelsInDisc to gpu" << std::endl;
             // send max pixel number per-disc to gpu.
-            CUDA_ERROR_CHECK(
+            //CUDA_ERROR_CHECK(
                 cudaMemcpyAsync(
                     nPixelsInDiscGPU[strm],
                     nPixelsInDisc[strm],
                     nPixelInDiscBufferSize,
-                    cudaMemcpyHostToDevice, streams[strm])
-            );
-            std::cerr << "stream: " << strm << " executing gpu kernel on stream " << strm << "." << std::endl;
-            // calculate partial convolution of beam and sky
+                    cudaMemcpyHostToDevice, streams[strm]);
+            //);
+        }
+        for(strm = 0; strm < cfg.nStreams; strm++)
+        {
+            std::cerr 
+                << "stream: " << strm 
+                << " copying skyPixelsInBeam to gpu" << std::endl;
+            // send sky pixels in beam to gpu.
+            //CUDA_ERROR_CHECK(
+                cudaMemcpyAsync(
+                    skyPixelsInBeamGPU[strm],
+                    skyPixelsInBeam[strm],
+                    skyPixelsInBeamBufferSize,
+                    cudaMemcpyHostToDevice, streams[strm]);
+            //);
+        }
+        std::cerr 
+            << "stream: " << strm 
+            << " executing gpu kernel on stream " << strm 
+            << "." << std::endl;
+        // and run all the kernels
+        // calculate partial convolution of beam and sky
+        for(strm = 0; strm < cfg.nStreams; strm++)
+        {
             CUDACONV::streamed_beam_times_sky(
                 cfg,
                 ptgBufferGPU[strm],
@@ -382,56 +421,44 @@ void GPUConvolver::exec_convolution(
                 skyPixelsInBeamGPU[strm], nPixelsInDiscGPU[strm],
                 streams[strm],
                 resultGPU[strm]);
-            // bring the data from GPU back to the host buffer.
-            std::cerr << "stream: " << strm << " copying data back." << std::endl;
-            CUDA_ERROR_CHECK
-            (
-                cudaMemcpyAsync(
-                    result[strm],
-                    resultGPU[strm],
-                    resultBufferSize,
-                    cudaMemcpyDeviceToHost, 
-                    streams[strm])
-            );
         }
-        // ugly waiting loop
-        strm = 0;
-        nCompletedStreams = 0;
-        allStreamsCompleted = false;
-        std::cerr << "stream: " << strm << " waiting for GPU to complete calculation." << std::endl;
-        while(!allStreamsCompleted)
-        {
-            if(cudaStreamQuery(streams[strm % cfg.nStreams]) == cudaSuccess)
-            {
-                nCompletedStreams++;
-            }
-            allStreamsCompleted = nCompletedStreams == (cfg.nStreams - 1);
-            strm++;
-        }
-        // execute work and fetch results in parallel
+        // bring the data from GPU back to the host buffer.
+        /** why so serial! **/
         // explicitly disable dynamic teams!
-        omp_set_dynamic(0);     
+        //omp_set_dynamic(0);     
         // Use nStreams threads for all consecutive parallel regions
-        omp_set_num_threads(cfg.nStreams); 
-        #pragma omp parallel default(shared)
+        //omp_set_num_threads(cfg.nStreams); 
+        //#pragma omp parallel default(shared) private(strm)
+       // {
+        for(strm = 0; strm < cfg.nStreams; strm++)
         {
-            int strm = omp_get_thread_num();
-            cudaStreamSynchronize(streams[strm]); 
-            std::cerr << "stream: " << strm << " copying data for detector a." << std::endl;
+            //strm = omp_get_thread_num();
+            std::cerr 
+                << "stream: " << strm 
+                << " copying data back." << std::endl;
             if(beam->enabledDets == 'a' || beam->enabledDets == 'p')
             {
-                memcpy(
-                    &(data_a[samp + strm * ptgPerConv]), 
-                    &(result[strm][0]), 
-                    resultBufferSize/2);
+                CUDA_ERROR_CHECK
+                (
+                    cudaMemcpyAsync(
+                        &(data_a[samp + strm * ptgPerConv]),
+                        &(resultGPU[strm][0]),
+                        resultBufferSize / 2,
+                        cudaMemcpyDeviceToHost, 
+                        streams[strm])
+                );
             }
-            std::cerr << "stream: " << strm << " copying data for detector b." << std::endl;
             if(beam->enabledDets == 'b' || beam->enabledDets == 'p')
             {
-                memcpy(
-                    &(data_b[samp + strm * ptgPerConv]), 
-                    &(result[strm][ptgPerConv]), 
-                    resultBufferSize/2);
+                CUDA_ERROR_CHECK
+                (
+                    cudaMemcpyAsync(
+                        &(data_b[samp + strm * ptgPerConv]),
+                        &(resultGPU[strm][ptgPerConv]),
+                        resultBufferSize / 2,
+                        cudaMemcpyDeviceToHost, 
+                        streams[strm])
+                );
             }
         }
     }
