@@ -45,7 +45,8 @@ kernel_beam_times_sky
     
     float rasp, decsp;
     float rabc, pabc, decbc;
-    float rho, sigma, chi, q, c2chi, s2chi;
+    double rho, sigma, chi;
+    float q, c2chi, s2chi;
 
     double baval[4];
     double bbval[4];
@@ -95,9 +96,10 @@ kernel_beam_times_sky
             /* Compute rho sigma and chi at beam pixel. */
             cudaSphericalTransformations::rho_sigma_chi_pix(
                 &rho, &sigma, &chi, 
-                rabc, decbc, pabc, rasp, decsp);
+                double(rabc), double(decbc), double(pabc), 
+                double(rasp), double(decsp));
             /* sin() and cos() of off-center polarization angle. */
-            q = 2.0 * chi;
+            q = 2.0f * chi;
             c2chi = cosf(q);
             s2chi = sinf(q);
             #ifdef CUDACONV_USE_INTERPOLATION
