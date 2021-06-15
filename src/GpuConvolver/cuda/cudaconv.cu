@@ -43,9 +43,9 @@ kernel_beam_times_sky
     double wgt[4];
     #endif
     
-    double rasp, decsp;
-    double rabc, pabc, decbc;
-    double rho, sigma, chi, q, c2chi, s2chi;
+    float rasp, decsp;
+    float rabc, pabc, decbc;
+    float rho, sigma, chi, q, c2chi, s2chi;
 
     double baval[4];
     double bbval[4];
@@ -98,8 +98,8 @@ kernel_beam_times_sky
                 rabc, decbc, pabc, rasp, decsp);
             /* sin() and cos() of off-center polarization angle. */
             q = 2.0 * chi;
-            c2chi = cos(q);
-            s2chi = sin(q);
+            c2chi = cosf(q);
+            s2chi = sinf(q);
             #ifdef CUDACONV_USE_INTERPOLATION
             // Interpolate beam at (rho,sigma).	
             cudaHealpix::get_interpol(bnside, rho, sigma, neighPixels, wgt);         
@@ -237,11 +237,13 @@ CUDACONV::streamed_beam_times_sky(
         cfg.pixelsPerDisc, intraBeamPixelsGPU, maxIntraBeamPixGPU,
         dataGPU
     );
+    /*
     #ifdef CUDACONV_DEBUG
     cudaDeviceSynchronize();
     cudaError_t err = cudaGetLastError();
     if (err != cudaSuccess) 
         printf("Error: %s\n", cudaGetErrorString(err));
     #endif
+    */
 }
 
