@@ -1,8 +1,8 @@
 #!/bin/bash
-TAG="test_nstreams-3"
-nsideIn=256
-nsideOut=256
-beamnside=2048
+TAG="test_nstreams-5"
+nsideIn=128
+nsideOut=128
+beamnside=512
 beamfwhm_deg=0.6604
 scan=wholesky 
 det=p
@@ -16,7 +16,7 @@ cd build || exit 1
 rm -r * || exit 1
 cmake ../ \
   -DCONVOLVER_DISABLECHI=OFF \
-  -DCONVOLVER_OPENMPENABLED=OFF \
+  -DCONVOLVER_OPENMPENABLED=ON \
   -DPOLBEAM_DUMPBEAMS=ON \
   -DCONVOLVER_DEBUG=OFF \
   -DMAPPING_DEBUG=ON \
@@ -24,10 +24,10 @@ cmake ../ \
 make -j4 simulate_wholesky_scan.x || exit 1
 cd ../ || exit 1
 # build beams
-#python scripts/fields2beams.py \
-#  data/beams/offset_ref/det_a.txt $beamnside || exit 1
-#python scripts/fields2beams_cxisco.py \
-#  data/beams/offset_ref/det_b.txt $beamnside || exit 1
+python scripts/fields2beams.py \
+  data/beams/offset_ref/det_a.txt $beamnside || exit 1
+python scripts/fields2beams_cxisco.py \
+  data/beams/offset_ref/det_b.txt $beamnside || exit 1
 cp data/beams/offset_ref/hpx_tilde_beams_det_a.txt \
   "output/beam_a.txt" || exit 1
 cp data/beams/offset_ref/hpx_tilde_beams_det_b.txt \
@@ -65,8 +65,8 @@ mv ps.csv output/
 python scripts/plot_powerspectrum.py output/ps.csv output/cl_data.csv
 # move things to final directory
 mv ps.png output/
-mkdir $TAG
-cp -r output/* $TAG"/"
+#mkdir $TAG
+#cp -r output/* $TAG"/"
 # none of this ever happened, gentlemen
-rm -r output/*
+#rm -r output/*
 exit 0
