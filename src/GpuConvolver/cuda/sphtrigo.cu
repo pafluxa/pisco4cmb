@@ -35,8 +35,7 @@ __device__ void cudaSphericalTransformations::rho_sigma_chi_pix
   double crho  = sdc * sdp + cdc * cdp * cd;
   if(crho >= 1.0)*rho = 0.0;
   else *rho = acos(crho);
-  /* NVIDIA: we are 100% IEE794 complaint.
-     Me: hold my beer. 
+  /* NVIDIA: we are 100% IEE794 complaint. Sure you do!
      (this corner case was figured out by Michael Brewer) */ 
   if(*rho > 1.0e-6) { 
     beta  = atan2(sd * cdc, sdc * cdp - cdc * sdp * cd);  
