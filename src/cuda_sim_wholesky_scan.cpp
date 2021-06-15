@@ -17,19 +17,19 @@
 #include <healpix_base.h>
 #include <pointing.h>
 
-#define NSIDE_SKY (256)
-#define NSIDE_SKY_OUT (256)
+#define NSIDE_SKY (128)
+#define NSIDE_SKY_OUT (128)
 #define NPIXELS_SKY (12 * (NSIDE_SKY) * (NSIDE_SKY))
 #define NPIXELS_SKY_OUT (12 * (NSIDE_SKY_OUT) * (NSIDE_SKY_OUT))
+#define NSIDE_BEAM 512
 /** how to calculate the number of pixels below
 import healpy
 import numpy
-nside = 2048
+nside = 512
 print(healpy.query_disc(nside, (0,0,1), numpy.radians(5)).size)
-#95484
+#5940
 **/
-#define NSIDE_BEAM 2048
-#define NPIXELS_BEAM (95484)
+#define NPIXELS_BEAM (5940)
 /** number of time samples = number of pixels because this is a 
  *  whole sky simulation.
  **/
@@ -160,36 +160,32 @@ int main(int argc, char** argv )
     Scan scan(NSAMPLES, ra, dec, psi);
     // initialize convolver object
     CUDACONV::RunConfig cfg;
-    cfg.nStreams = 4;
+    cfg.nStreams = 2;
     cfg.maxMemUsage = size_t(11 * 1e9);
     cfg.deviceId = 0;
     cfg.gridSizeX = 512;
     cfg.gridSizeY = 1;
     cfg.blockSizeX = 64;
     cfg.blockSizeY = 1;
-    cfg.ptgPerConv = 8192 * 12;
-    cfg.pixelsPerDisc = 6500;
+    cfg.ptgPerConv = 8192;
+    cfg.pixelsPerDisc = 6200;
     GPUConvolver cconv(cfg);
     cconv.update_sky(&sky);
     cconv.update_beam(&beam);
     // setup detetctor angle arays
     float detectorAngle[1];
     float positionAngles[] = {-45, 0, 45};
+    start = std::chrono::steady_clock::now();
     // every PSB scans the sky at different angles
     for(float bcpa_deg: positionAngles)
     {
         // angles are in degrees. convert.
         float bcpa = M_PI * (bcpa_deg / 180.0);
         init_wholesky_scan(NSIDE_SKY, bcpa, ra, dec, psi);
-        start = std::chrono::steady_clock::now();
         // compute convolution for detector A and B of PSB
         cconv.exec_convolution(
             psbDataA, psbDataB, 
             &scan, &sky, &beam);
-        stop = std::chrono::steady_clock::now();
-        double elapsed = 
-            std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count();
-        std::cerr << "elapsed time per convolution: " << elapsed << "ms" << std::endl;
         // project detector data to map-making matrices
         if(projDets == 'a' || projDets == 'p') 
         {
@@ -213,6 +209,12 @@ int main(int argc, char** argv )
         }
     }
     smap.solve_map();
+    stop = std::chrono::steady_clock::now();
+    double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count();
+    std::cerr << "time taken to convolve beam and sky: " << elapsed << "ms" << std::endl;
+    outdata.close();
+    free_everything();
+    /*
     hits = smap.get_hitmap();
     mapI = smap.get_stokes_I();
     mapQ = smap.get_stokes_Q();
@@ -224,9 +226,10 @@ int main(int argc, char** argv )
                    mapU[i] << " " <<
                    hits[i] << std::endl;
     }
+
     outdata.close();
     free_everything();
-
+    */
     return 0;
 }
 
