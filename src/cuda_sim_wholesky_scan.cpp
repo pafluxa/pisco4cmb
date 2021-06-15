@@ -161,14 +161,14 @@ int main(int argc, char** argv )
     // initialize convolver object
     CUDACONV::RunConfig cfg;
     cfg.nStreams = 4;
-    cfg.maxMemUsage = size_t(8 * 1e9);
+    cfg.maxMemUsage = size_t(11 * 1e9);
     cfg.deviceId = 0;
     cfg.gridSizeX = 512;
     cfg.gridSizeY = 1;
     cfg.blockSizeX = 64;
     cfg.blockSizeY = 1;
-    cfg.ptgPerConv = 8192 * 16;
-    cfg.pixelsPerDisc = 2000;
+    cfg.ptgPerConv = 8192 * 12;
+    cfg.pixelsPerDisc = 6500;
     GPUConvolver cconv(cfg);
     cconv.update_sky(&sky);
     cconv.update_beam(&beam);
