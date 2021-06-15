@@ -157,8 +157,8 @@ kernel_beam_times_sky
         /* Final write to global memory. */
         if(threadIdx.x == 0) 
         {
-            data[2*iy + 0] = shA[0];
-            data[2*iy + 1] = shB[0];
+            data[0 * nptgs + iy] = shA[0];
+            data[1 * nptgs + iy] = shB[0];
         }
     }
 }
@@ -237,5 +237,11 @@ CUDACONV::streamed_beam_times_sky(
         cfg.pixelsPerDisc, intraBeamPixelsGPU, maxIntraBeamPixGPU,
         dataGPU
     );
+    #ifdef CUDACONV_DEBUG
+    cudaDeviceSynchronize();
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) 
+        printf("Error: %s\n", cudaGetErrorString(err));
+    #endif
 }
 
