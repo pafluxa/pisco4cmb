@@ -56,7 +56,12 @@ if(USE_CUDA)
   # instruct nvcc to use fPIC for separate compilation of CUDA objects
   set(CUDA_NVCC_FLAGS 
     ${CUDA_NVCC_FLAGS}; 
-    --maxrregcount 32
+    --default-stream per-thread
+    --maxrregcount 64
+    --prec-div=false
+    --prec-sqrt=false
+    --extra-device-vectorization
+    --expt-relaxed-constexpr
     --compiler-options -fPIC)
 endif()
 # enable beam interpolation when calculating the convolution
