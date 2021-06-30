@@ -21,7 +21,7 @@ class Sky
        ~Sky(){};
         
         int get_nside (void) const { return nside; };
-        unsigned long size (void) const { return nPixels; };
+        int size (void) const { return nPixels; };
 
 		Healpix_Base hpxBase;
 		
@@ -33,8 +33,8 @@ class Sky
         
     private:
 		
-		unsigned int  nside;
-        unsigned long nPixels;
+		int nside;
+        int nPixels;
 };
 
 #endif // end include guard

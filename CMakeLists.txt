@@ -24,7 +24,7 @@ find_package(Sofa REQUIRED)
 find_package(cfitsio REQUIRED)
 # it seems like CMAKE can't find openmp on its own
 # compile with -O2 seems to be a good compromise
-SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native -fopenmp -pthread -O2")
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native -fopenmp -pthread -O3")
 # flag to disable correct polarization angle calculation
 if(CONVOLVER_DISABLECHI)
   add_definitions(-DCONVOLVER_DISABLECHI)
@@ -57,11 +57,7 @@ if(USE_CUDA)
   set(CUDA_NVCC_FLAGS 
     ${CUDA_NVCC_FLAGS}; 
     --default-stream per-thread
-    --maxrregcount 64
-    --prec-div=false
-    --prec-sqrt=false
-    --extra-device-vectorization
-    --expt-relaxed-constexpr
+    -arch=sm_52
     --compiler-options -fPIC)
 endif()
 # enable beam interpolation when calculating the convolution
@@ -87,13 +83,15 @@ if(USE_CUDA)
         src/Polbeam/polbeam.cpp
         src/Sphtrigo/sphtrigo.cpp
         src/GpuConvolver/gpuconvolver.cu
-        src/GpuConvolver/cuda/cudaconv.cu
-        src/GpuConvolver/cuda/sphtrigo.cu
-        src/GpuConvolver/cuda/healpix_utils.cu)
+        src/Convolver/convolver.cpp
+        src/GpuConvolver/cuda/cudaConv2.cu
+        src/GpuConvolver/cuda/cudaSphtransf.cu
+        src/GpuConvolver/cuda/cudaHealpix.cu)
 else()
     add_library(pisco SHARED
         src/Sky/sky.cpp
         src/SkyMap/skymap.cpp
+        src/Convolver/convolver.cpp
         src/Scan/scan.cpp
         src/Bpoint/bpoint.cpp
         src/Bpoint/ElapsedTime.cpp
@@ -114,10 +112,10 @@ target_include_directories(pisco PUBLIC
     ${CFITSIO_INCLUDE_DIR})
 # compile wholesky simulation executable
 if(USE_CUDA)
-  cuda_add_executable(simulate_wholesky_scan.x src/cuda_sim_wholesky_scan.cpp)
-#  cuda_add_executable(simulate_pointsource_scan.x src/cuda_sim_pointsource_scan.cpp)
+  cuda_add_executable(simulate_wholesky_scan.x programs/cuda_sim_wholesky_scan.cpp)
+  cuda_add_executable(simulate_pointsource_obs.x programs/cuda_sim_pointsource_obs.cpp)
 else()
-  add_executable(simulate_wholesky_scan.x src/sim_wholesky_scan.cpp)
+  add_executable(simulate_wholesky_scan.x programs/sim_wholesky_scan.cpp)
 endif()
 target_include_directories(simulate_wholesky_scan.x PRIVATE src/)
 target_link_libraries(simulate_wholesky_scan.x 
@@ -128,13 +126,14 @@ target_link_libraries(simulate_wholesky_scan.x
     ${CHEALPIX_LIBRARIES}
     ${HEALPIX_LIBRARIES}
     ${CFITSIO_LIBRARIES})
-#target_include_directories(simulate_pointsource_scan.x PRIVATE src/)
-#target_link_libraries(simulate_pointsource_scan.x 
-    #pisco
-    #${SOFA_LIBRARIES}
-    #${OpenMP_LIBRARIES}
-    #${LAPACK_LIBRARIES}
-    #${CHEALPIX_LIBRARIES}
-    #${HEALPIX_LIBRARIES}
-    #${CFITSIO_LIBRARIES})
+    
+target_include_directories(simulate_pointsource_obs.x PRIVATE src/)
+target_link_libraries(simulate_pointsource_obs.x 
+    pisco
+    ${SOFA_LIBRARIES}
+    ${OpenMP_LIBRARIES}
+    ${LAPACK_LIBRARIES}
+    ${CHEALPIX_LIBRARIES}
+    ${HEALPIX_LIBRARIES}
+    ${CFITSIO_LIBRARIES})
 

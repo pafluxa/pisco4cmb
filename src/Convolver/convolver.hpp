@@ -15,7 +15,7 @@ class Convolver
 {
     public:
 
-        Convolver(const Scan* scan, const Sky* sky, const PolBeam* beam);
+        Convolver(Scan* scan, Sky* sky, PolBeam* beam);
        ~Convolver();
         void exec_convolution(char polFlag, float* data_a, float* data_b);
 
@@ -23,9 +23,9 @@ class Convolver
 
         unsigned long nsamples;
 
-        const Scan* scan;
-        const Sky* sky;
-        const PolBeam* beam;
+        Scan* scan;
+        Sky* sky;
+        PolBeam* beam;
 
         void beam_times_sky(
             double phi0,

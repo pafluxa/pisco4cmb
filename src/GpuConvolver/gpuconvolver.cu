@@ -11,20 +11,20 @@ gpuAssert(cudaError_t code, const char file[], int line, bool abort=true)
 {                                                                                                             
     if (code != cudaSuccess)                                                                                   
     {                                                                                                          
-        std::cerr << "ERROR (GPUassert): " 
+        std::cerr << "GPUassert: " 
             << "A CUDA related error was encountered. "
             << "Error is: " << cudaGetErrorString(code) << ", triggered "
             << "from file " << file 
             << " at line " << line << std::endl;                          
         if(abort)
         { 
-            std::cerr << "FATAL (GPUassert): " 
+            std::cerr << "FATAL: " 
                 << "program was aborted." << std::endl;
             exit(-1); 
         }  
         else
         {
-            std::cerr << "WARNING (GPUassert):"
+            std::cerr << "WARNING:"
                 << "press any key to continue." << std::endl;
             getchar();
         }
@@ -34,15 +34,20 @@ gpuAssert(cudaError_t code, const char file[], int line, bool abort=true)
 GPUConvolver::GPUConvolver(CUDACONV::RunConfig _cfg)
 {
     cfg = _cfg;
+    
+    // todo: fix this!!!
+    cfg.nStreams = 1;
+    
     hasSky = false;
     hasBeam = false;
+    hasScan = false;
     hasValidConfig = false;
     /* Calculate size of all buffers that will be used. */
     pixPerDisc = cfg.pixelsPerDisc;
     ptgPerConv = cfg.ptgPerConv;
     // 2 x size because there are two detectors. This is a small array
     // anyways, not worth to go cheap on memory
-    resultBufferSize = 2 * ptgPerConv * sizeof(float);
+    resultBufferSize = ptgPerConv * sizeof(float);
     ptgBufferSize = N_POINTING_COORDS * ptgPerConv * sizeof(float);
     // buffer holding all pixels seen by a particular pointing.
     // this array can get pretty large so be careful
@@ -57,127 +62,160 @@ GPUConvolver::GPUConvolver(CUDACONV::RunConfig _cfg)
       + skyPixelsInBeamBufferSize);
     // check required memory is within limits set by user.
     hasValidConfig = (reqMemory < cfg.maxMemUsage) && (cfg.nStreams > 0);
-    std::cerr << reqMemory << std::endl;
-    std::cerr << cfg.maxMemUsage << std::endl;
-    std::cerr << cfg.nStreams << std::endl;
-    configure_execution();
-    allocate_buffers();
+    std::cerr << "GPUConvolver::constructor: ";
+    std::cerr << "is configuration is valid? " << hasValidConfig << std::endl;
+    std::cerr << "GPUConvolver::constructor: ";
+    std::cerr << "requested memory is " << reqMemory << " bytes and ";
+    std::cerr << "available memory is " << cfg.maxMemUsage << " bytes. " << std::endl;
 }
 
 void GPUConvolver::configure_execution(void)
 {
-    if(cfg.nStreams > CUDACONV_MAXSTREAMS)
-    {
-        hasValidConfig = false;
-        std::cerr << "MESSAGE (cudaconv): " 
-            << cfg.nStreams << " must be lower than " 
-            << CUDACONV_MAXSTREAMS << std::endl;
-    }
     if(!hasValidConfig)
     {
         throw std::invalid_argument(
-            "ERROR (GPUConvolver): invalid configuration.");
+            "FATAL: GPUConvolver has an invalid configuration.");
     }
     cudaDeviceProp prop;
     CUDA_ERROR_CHECK(cudaGetDeviceProperties(&prop, cfg.deviceId));
-    //#ifdef CUDACONV_DEBUG
-    std::cerr << "MESSAGE (GPUConvolver): "
-        << "Executing on device id: " << prop.name << std::endl;
-    //#endif
+    std::cerr << "GPUConvolver::configure_execution: ";
+    std::cerr << "Executing on device id: " << prop.name << std::endl;
     /* Set device to the one specified by the user. */
     CUDA_ERROR_CHECK(cudaSetDevice(cfg.deviceId));
-    /* Create events and streams for pipelined convolution. */
-    for(int i = 0; i < cfg.nStreams; i++)
-    {
-        CUDA_ERROR_CHECK
-        (  
-            cudaStreamCreate(&(streams[i]))
-        );
-        CUDA_ERROR_CHECK(
-            cudaEventCreate(&(streamWait[i]))
-        );
-    }
+    
+    allocate_buffers();
 }
 
 void GPUConvolver::allocate_buffers(void)
 {
-    for(int i = 0; i < cfg.nStreams; i++)
-    {
-    // allocate buffers to store partial pointing
-        CUDA_ERROR_CHECK(
-            cudaMallocHost(
-                (void **)&(ptgBuffer[i]), ptgBufferSize)
-        );
-        CUDA_ERROR_CHECK(
-            cudaMalloc(
-                (void **)&(ptgBufferGPU[i]), ptgBufferSize)
-        );
-        // to store intra-beam sky pixels (host)
-        CUDA_ERROR_CHECK(
-            cudaMallocHost((void **)&(skyPixelsInBeam[i]), 
-                skyPixelsInBeamBufferSize)
-        );
-        // to store intra-beam sky pixels (GPU)
-        CUDA_ERROR_CHECK(
-            cudaMalloc((void **)&(skyPixelsInBeamGPU[i]), 
-                skyPixelsInBeamBufferSize)
-        );
-        // to store the number of pixels in every disc (host)
-        CUDA_ERROR_CHECK(
-            cudaMallocHost((void **)&(nPixelsInDisc[i]), 
-                nPixelInDiscBufferSize)
-        );
-        // to store the number of pixels in every disc (GPU)
-        CUDA_ERROR_CHECK(
-            cudaMalloc((void **)&(nPixelsInDiscGPU[i]), 
-                nPixelInDiscBufferSize)
-        );
-        // to store the result of a partial convolution (GPU)
-        CUDA_ERROR_CHECK(
-            cudaMallocHost((void **)&(result[i]), 
-                resultBufferSize)
-        );
-        CUDA_ERROR_CHECK(
-            cudaMalloc((void **)&(resultGPU[i]), 
-                resultBufferSize)
-        );
-    }
-    std::cerr << "memory allocated." << std::endl;
+    std::cerr << "GPUConvolver::allocate_buffers: ";
+    std::cerr << "allocating GPU pointing buffer" << std::endl;
+    CUDA_ERROR_CHECK
+    (
+        cudaMalloc(
+            (void **)&(ptgBufferGPU), ptgBufferSize)
+    );
+    // to store intra-beam sky pixels (host)
+    std::cerr << "GPUConvolver::allocate_buffers: ";
+    std::cerr << "allocating host intra-beam pixel buffer" << std::endl;
+    CUDA_ERROR_CHECK
+    (
+        cudaMallocHost((void **)&(skyPixelsInBeam), 
+            skyPixelsInBeamBufferSize)
+    );
+    // to store intra-beam sky pixels (GPU)
+    std::cerr << "GPUConvolver::allocate_buffers: ";
+    std::cerr << "allocating GPU intra-beam pixel buffer" << std::endl;
+    CUDA_ERROR_CHECK
+    (
+        cudaMalloc((void **)&(skyPixelsInBeamGPU), 
+            skyPixelsInBeamBufferSize)
+    );
+    CUDA_ERROR_CHECK
+    (
+        cudaMemset(skyPixelsInBeamGPU, 0, skyPixelsInBeamBufferSize)
+    );
+    
+    //allocate storage for matchingBeamPixels
+    std::cerr << "GPUConvolver::allocate_buffers: ";
+    std::cerr << "allocating GPU intra-beam pixel buffer (beam pixels)" << std::endl;
+    CUDA_ERROR_CHECK
+    (
+        cudaMalloc((void **)&(matchingBeamPixelsGPU), 
+            skyPixelsInBeamBufferSize)
+    );
+    CUDA_ERROR_CHECK
+    (
+        cudaMemset(matchingBeamPixelsGPU, 0, skyPixelsInBeamBufferSize)
+    );
+
+    //allocate storage for chiAngles
+    std::cerr << "GPUConvolver::allocate_buffers: ";
+    std::cerr << "allocating GPU chi angles." << std::endl;
+    CUDA_ERROR_CHECK
+    (
+        cudaMalloc((void **)&(chiAnglesGPU), 
+            skyPixelsInBeamBufferSize)
+    );
+    CUDA_ERROR_CHECK
+    (
+        cudaMemset(chiAnglesGPU, 0, skyPixelsInBeamBufferSize)
+    );
+
+    // to store the number of pixels in every disc (host)
+    std::cerr << "GPUConvolver::allocate_buffers: ";
+    std::cerr << "allocating host npixels in intra-beam buffer" << std::endl;
+    CUDA_ERROR_CHECK
+    (
+        cudaMallocHost((void **)&(nPixelsInDisc), 
+            nPixelInDiscBufferSize)
+    );
+    std::cerr << "GPUConvolver::allocate_buffers: ";
+    std::cerr << "allocating GPU npixels in intra-beam buffer" << std::endl;
+    // to store the number of pixels in every disc (GPU)
+    CUDA_ERROR_CHECK(
+        cudaMalloc((void **)&(nPixelsInDiscGPU), 
+            nPixelInDiscBufferSize)
+    );
+    CUDA_ERROR_CHECK
+    (
+        cudaMemset(nPixelsInDiscGPU, 0, nPixelInDiscBufferSize)
+    );
+    std::cerr << "GPUConvolver::allocate_buffers: ";
+    std::cerr << "allocating GPU data buffer" << std::endl;
+    CUDA_ERROR_CHECK
+    (
+        cudaMalloc((void **)&(resultGPU), 2 * resultBufferSize)
+    );
 }
 
 GPUConvolver::~GPUConvolver()
 {
     if(hasValidConfig)
     {
-        for(int i = 0; i < cfg.nStreams; ++i)
-        {
-            CUDA_ERROR_CHECK
-            (
-                cudaStreamDestroy(streams[i])
-            );
-            CUDA_ERROR_CHECK
-            (
-                cudaEventDestroy(streamWait[i])
-            );
-        }
-        for(int i = 0; i < cfg.nStreams; ++i)
-        {
-            CUDA_ERROR_CHECK(cudaFreeHost(result[i]));
-            CUDA_ERROR_CHECK(cudaFree(resultGPU[i]));
-            CUDA_ERROR_CHECK(cudaFreeHost(nPixelsInDisc[i]));
-            CUDA_ERROR_CHECK(cudaFree(nPixelsInDiscGPU[i]));
-            CUDA_ERROR_CHECK(cudaFreeHost(skyPixelsInBeam[i]));
-            CUDA_ERROR_CHECK(cudaFree(skyPixelsInBeamGPU[i]));
-            CUDA_ERROR_CHECK(cudaFreeHost(ptgBuffer[i]));
-            CUDA_ERROR_CHECK(cudaFree(ptgBufferGPU[i]));
-        }
+        std::cerr << "GPUConvolver::destructor: ";
+        std::cerr << "deallocating host data buffer" << std::endl;
+        CUDA_ERROR_CHECK(cudaFree(resultGPU));
+        
+        std::cerr << "GPUConvolver::destructor: ";
+        std::cerr << "deallocating host npixels in intra-beam buffer" << std::endl;
+        CUDA_ERROR_CHECK(cudaFreeHost(nPixelsInDisc));
+        
+        std::cerr << "GPUConvolver::destructor: ";
+        std::cerr << "deallocating GPU npixels in intra-beam buffer" << std::endl;
+        CUDA_ERROR_CHECK(cudaFree(nPixelsInDiscGPU));
+        
+        std::cerr << "GPUConvolver::destructor: ";
+        std::cerr << "deallocating host intra-beam pixel buffer" << std::endl;
+        CUDA_ERROR_CHECK(cudaFreeHost(skyPixelsInBeam));
+        
+        std::cerr << "GPUConvolver::destructor: ";
+        std::cerr << "deallocating GPU intra-beam pixel buffer" << std::endl;
+        CUDA_ERROR_CHECK(cudaFree(skyPixelsInBeamGPU));
+        
+        std::cerr << "GPUConvolver::destructor: ";
+        std::cerr << "deallocating GPU pointing buffer" << std::endl;
+        CUDA_ERROR_CHECK(cudaFree(ptgBufferGPU));
+        
+        std::cerr << "GPUConvolver::destructor: ";
+        std::cerr << "deallocating chi angles buffer" << std::endl;
+        CUDA_ERROR_CHECK(cudaFree(chiAnglesGPU));
+
+        std::cerr << "GPUConvolver::destructor: ";
+        std::cerr << "deallocating beam matching pixels buffer" << std::endl;
+        CUDA_ERROR_CHECK(cudaFree(matchingBeamPixelsGPU));
     }
     if(hasBeam)
     {
+        std::cerr << "GPUConvolver::desctructor: ";
+        std::cerr << "deallocating GPU beam buffers." << std::endl;
         CUDA_ERROR_CHECK(cudaFree(aBeamsGPU));
+        CUDA_ERROR_CHECK(cudaFree(bBeamsGPU));
     }
     if(hasSky)
     {
+        std::cerr << "GPUConvolver::desctructor: ";
+        std::cerr << "deallocating GPU sky buffer." << std::endl;
         CUDA_ERROR_CHECK(cudaFree(skyGPU));
     }
 }
@@ -185,17 +223,28 @@ GPUConvolver::~GPUConvolver()
 void GPUConvolver::update_sky(Sky* sky)
 {
     /* Allocate temporal buffers to hold the transposed sky*/
-    long nspixels = sky->size();
-    skyBufferSize = N_SKY_COMP * sizeof(float) * nspixels;
+    std::cerr << "GPUConvolver::update_sky: ";
+    std::cerr << "allocating temporary transposed sky buffer.";
+    std::cerr << std::endl;
+    npixSky = sky->size();
+    nsideSky = sky->get_nside();
+    
+    skyBufferSize = N_SKY_COMP * sizeof(float) * npixSky;
     float* skyTransponsed;
     skyTransponsed = (float*)malloc(skyBufferSize);
     /* Allocate buffers if no sky has been allocated yet.*/
     if(!hasSky)
     {
+        std::cerr << "GPUConvolver::update_sky: ";
+        std::cerr << "allocating GPU sky buffer.";
+        std::cerr << std::endl;
         CUDA_ERROR_CHECK(
             cudaMalloc((void **)&skyGPU, skyBufferSize));
     }
     hasSky = true;
+    std::cerr << "GPUConvolver::update_sky: ";
+    std::cerr << "moving data to transposed sky buffer.";
+    std::cerr << std::endl;
     for(long i = 0; i < sky->size(); i++)
     {
         skyTransponsed[4 * i + 0] = sky->sI[i];
@@ -203,6 +252,9 @@ void GPUConvolver::update_sky(Sky* sky)
         skyTransponsed[4 * i + 2] = sky->sU[i];
         skyTransponsed[4 * i + 3] = sky->sV[i];
     }
+    std::cerr << "GPUConvolver::update_sky: ";
+    std::cerr << "copying transposed sky buffer to GPU.";
+    std::cerr << std::endl;
     CUDA_ERROR_CHECK(
         cudaMemcpy(
             skyGPU,
@@ -210,27 +262,28 @@ void GPUConvolver::update_sky(Sky* sky)
             skyBufferSize,
             cudaMemcpyHostToDevice)
     );
+    std::cerr << "GPUConvolver::update_sky: ";
+    std::cerr << "free transposed sky buffer.";
+    std::cerr << std::endl;
     free(skyTransponsed);
-    std::cerr << "sky updated." << std::endl;
 }
 
 void GPUConvolver::update_beam(PolBeam* beam)
 {
     /* Allocate buffers if no beam has been added yet.*/
-    long nbpixels = beam->size();
-    
-    beamBufferSize = N_POLBEAMS * nbpixels * sizeof(float);
+    npixBeam = beam->size();
+    beamRhoMax = beam->get_rho_max();
+    nsideBeam = beam->get_nside();
+    beamBufferSize = N_POLBEAMS * npixBeam * sizeof(float);
     /* Allocate buffers if no beam has been added yet.*/
-    if(!hasBeam && 
-      (beam->enabledDets == 'a' || beam->enabledDets == 'p'))
+    if(!hasBeam)
     {
+        std::cerr << "GPUConvolver::update_beam: ";
+        std::cerr << "allocating GPU beam buffers.";
+        std::cerr << std::endl;
         CUDA_ERROR_CHECK(
             cudaMalloc((void **)&aBeamsGPU, beamBufferSize)
         );
-    }
-    if(!hasBeam && 
-      (beam->enabledDets == 'b' || beam->enabledDets == 'p'))
-    {
         CUDA_ERROR_CHECK(
             cudaMalloc((void **)&bBeamsGPU, beamBufferSize)
         );
@@ -238,228 +291,215 @@ void GPUConvolver::update_beam(PolBeam* beam)
     /* Update flag to signal that beam was allocated. */
     hasBeam = true;
     /* Transpose and copy to GPU . */
+    std::cerr << "GPUConvolver::update_beam: ";
+    std::cerr << "allocating transposed beam buffers.";
+    std::cerr << std::endl;
     float* transposedBeams;
     transposedBeams = (float*)malloc(N_POLBEAMS * beamBufferSize);
-    if(beam->enabledDets == 'a' || beam->enabledDets == 'p')
+    std::cerr << "GPUConvolver::update_beam: ";
+    std::cerr << "copying data from beam_a to transposed beam buffer.";
+    std::cerr << std::endl;
+    for(long i = 0; i < npixBeam; i++)
     {
-        for(long i = 0; i < nbpixels; i++)
-        {
-            transposedBeams[N_POLBEAMS * i + 0] = beam->aBeams[0][i];
-            transposedBeams[N_POLBEAMS * i + 1] = beam->aBeams[1][i];
-            transposedBeams[N_POLBEAMS * i + 2] = beam->aBeams[2][i];
-            transposedBeams[N_POLBEAMS * i + 3] = beam->aBeams[3][i];
-        }
-        CUDA_ERROR_CHECK(
-            cudaMemcpy(
-                aBeamsGPU,
-                transposedBeams, 
-                beamBufferSize,
-                cudaMemcpyHostToDevice)
-        );
+        transposedBeams[N_POLBEAMS * i + 0] = beam->aBeams[0][i];
+        transposedBeams[N_POLBEAMS * i + 1] = beam->aBeams[1][i];
+        transposedBeams[N_POLBEAMS * i + 2] = beam->aBeams[2][i];
+        transposedBeams[N_POLBEAMS * i + 3] = beam->aBeams[3][i];
     }
-    if(beam->enabledDets == 'b' || beam->enabledDets == 'p')
+    std::cerr << "GPUConvolver::update_beam: ";
+    std::cerr << "copying data from beam_a from transposed beam buffer ";
+    std::cerr << "to GPU beam buffer." << std::endl;
+    CUDA_ERROR_CHECK
+    (
+        cudaMemcpy(
+            aBeamsGPU,
+            transposedBeams, 
+            beamBufferSize,
+            cudaMemcpyHostToDevice)
+    );
+    std::cerr << "GPUConvolver::update_beam: ";
+    std::cerr << "copying data from beam_b to transposed beam buffer.";
+    std::cerr << std::endl;
+    for(long i = 0; i < npixBeam; i++)
     {
-        for(long i = 0; i < nbpixels; i++)
-        {
-            transposedBeams[N_POLBEAMS*i + 0] = beam->bBeams[0][i];
-            transposedBeams[N_POLBEAMS*i + 1] = beam->bBeams[1][i];
-            transposedBeams[N_POLBEAMS*i + 2] = beam->bBeams[2][i];
-            transposedBeams[N_POLBEAMS*i + 3] = beam->bBeams[3][i];
-        }
-        CUDA_ERROR_CHECK(
-            cudaMemcpy(
-                bBeamsGPU,
-                transposedBeams, 
-                beamBufferSize,
-                cudaMemcpyHostToDevice)
-        );
+        transposedBeams[N_POLBEAMS * i + 0] = beam->bBeams[0][i];
+        transposedBeams[N_POLBEAMS * i + 1] = beam->bBeams[1][i];
+        transposedBeams[N_POLBEAMS * i + 2] = beam->bBeams[2][i];
+        transposedBeams[N_POLBEAMS * i + 3] = beam->bBeams[3][i];
     }
+    std::cerr << "GPUConvolver::update_beam: ";
+    std::cerr << "copying data from beam_b from transposed beam buffer ";
+    std::cerr << "to GPU beam buffer." << std::endl;
+    CUDA_ERROR_CHECK
+    (
+        cudaMemcpy(
+            bBeamsGPU,
+            transposedBeams, 
+            beamBufferSize,
+            cudaMemcpyHostToDevice)
+    );
+    std::cerr << "GPUConvolver::update_beam: ";
+    std::cerr << "deallocating transposed beam buffer.";
+    std::cerr << std::endl;
     free(transposedBeams);
-    std::cerr << "beams updated." << std::endl;
 }
 
-void GPUConvolver::exec_convolution(
-    float* data_a, float* data_b,
-    Scan* scan, Sky* sky, PolBeam* beam)
+void GPUConvolver::update_scan(Scan* scan)
+{
+    nsamples = scan->get_nsamples();
+    float* rabcptg = scan->get_ra_ptr();
+    float* decbcptg = scan->get_dec_ptr();
+    float* pabcptg = scan->get_pa_ptr();
+    
+    if(!hasScan)
+    {
+        std::cerr << "GPUConvolver::update_scan: ";
+        std::cerr << "allocating pinned memory to store scan.";
+        std::cerr << std::endl;
+        CUDA_ERROR_CHECK(
+            cudaMallocHost
+            (
+                (void **)&(bcptg), 
+                nsamples * N_POINTING_COORDS * sizeof(float) 
+            )
+        );
+        hasScan = true;
+    }
+    std::cerr << "GPUConvolver::update_scan: ";
+    std::cerr << "copying data to pinned memory.";
+    std::cerr << std::endl;
+    for(long i = 0; i < nsamples; i++)
+    {
+        bcptg[N_POINTING_COORDS * i + 0] = rabcptg[i];
+        bcptg[N_POINTING_COORDS * i + 1] = decbcptg[i];
+        // Passed arguments are counterclockwise on the sky
+        // while CMB requires clockwise arguments.
+        bcptg[N_POINTING_COORDS * i + 2] = -pabcptg[i];
+        bcptg[N_POINTING_COORDS * i + 3] = 0.0;
+    }
+}
+
+void GPUConvolver::exec_convolution(float* data_a, float* data_b)
 {
     int samp;
-    int strm;
-    long nsamples;
-    double rmax; 
-
-    nsamples = scan->get_nsamples();
-    rmax = beam->get_rho_max();
-	
-    const float* ra_coords = scan->get_ra_ptr();
-	const float* dec_coords = scan->get_dec_ptr();
-	const float* pa_coords = scan->get_pa_ptr();
-    for(samp = 0; samp < nsamples; samp += cfg.nStreams * ptgPerConv) 
-    { 
-        std::cerr << samp << "/" << nsamples << std::endl;
-        
-        for(strm = 0; strm < cfg.nStreams; strm++)
-        { 
-            std::cerr 
-                << "stream: " << strm 
-                << " filling buffers for pointing and pixels-in-beam." 
-                << std::endl;
-            #pragma omp parallel default(shared)
-            // begin parallel region
-            {
+    // compute convolution in equal chunks of ptgPerConv samples
+    int nsamples2 = nsamples - (nsamples % ptgPerConv);
+    samp = 0;
+    while(samp < nsamples2)
+    {
+        /* Locate all sky pixels inside the beam for every pointing 
+         * direction in the scan chunk. */
+        #pragma omp parallel default(shared)
+        // begin parallel region
+        {
+            int idx;
             float ra;
             float dec;
-            float pa;
-            
-            int idx;
-            int sidx;
+            Healpix_Base hpxBase(nsideSky, RING, SET_NSIDE);
             
             #pragma omp for schedule(static)
             for(int k = 0; k < ptgPerConv; k++)
             {
-                int aidx = samp + strm * ptgPerConv + k;
-                // send dummy data
-                if(aidx >= nsamples)
-                { 
-                    ptgBuffer[strm][N_POINTING_COORDS * k + 0] = 0.0;
-                    ptgBuffer[strm][N_POINTING_COORDS * k + 1] = 0.0;
-                    ptgBuffer[strm][N_POINTING_COORDS * k + 2] = 0.0;
-                    nPixelsInDisc[strm][k] = 0;
-                    skyPixelsInBeam[strm][k * pixPerDisc + 0] = 0;
-                }
-                else
+                int aidx = samp + k;
+                ra = bcptg[N_POINTING_COORDS * aidx + 0];
+                dec = bcptg[N_POINTING_COORDS * aidx + 1];
+                rangeset<int> intraBeamRanges;
+                pointing sc(M_PI_2 - dec, ra);
+                hpxBase.query_disc(sc, beamRhoMax, intraBeamRanges);
+                // convert ranges to pixel list 
+                idx = 0;
+                for(int r = 0; r < intraBeamRanges.nranges(); r++) 
                 {
-                    ra = ra_coords[aidx];
-                    dec = dec_coords[aidx];
-                    // Passed arguments are counterclockwise on the sky
-                    // while CMB requires clockwise arguments.
-                    pa = -pa_coords[aidx];
-                    ptgBuffer[strm][N_POINTING_COORDS * k + 0] = ra; 
-                    ptgBuffer[strm][N_POINTING_COORDS * k + 1] = dec; 
-                    ptgBuffer[strm][N_POINTING_COORDS * k + 2] = pa;
-                    // Locate all sky pixels inside the beam for every 
-                    // pointing direction in the scan
-                    rangeset<int> intraBeamRanges;
-                    pointing sc(
-                        M_PI_2 - dec_coords[aidx], ra_coords[aidx]);
-                    sky->hpxBase.query_disc(sc, rmax, intraBeamRanges);
-                    // convert ranges to pixel list 
-                    idx = 0;
-                    for(int r = 0; r < intraBeamRanges.nranges(); r++) 
+                    int ss = intraBeamRanges.ivbegin(r);
+                    int ee = intraBeamRanges.ivend(r);
+                    for(int ii = ss; ii < ee; ii++) 
                     {
-                        int ss = intraBeamRanges.ivbegin(r);
-                        int ee = intraBeamRanges.ivend(r);
-                        for(int ii = ss; ii < ee; ii++) 
-                        {
-                            sidx = k * pixPerDisc + idx;
-                            skyPixelsInBeam[strm][sidx] = ii;
-                            idx++;
-                        }
+                        int sidx = k * pixPerDisc + idx;
+                        skyPixelsInBeam[sidx] = ii;
+                        idx++;
                     }
-                    nPixelsInDisc[strm][k] = idx;
                 }
+                nPixelsInDisc[k] = idx;
             }
-            // end parallel region
-            }
+        // end parallel region
         }
-        // do all the gpu stuff
-        for(strm = 0; strm < cfg.nStreams; strm++)
-        {
-            std::cerr 
-                << "stream: " << strm 
-                << " copying ptgBuffer to gpu" << std::endl;
-            // send pointing to gpu asynchronously
-            //CUDA_ERROR_CHECK(
-                cudaMemcpyAsync(
-                    ptgBufferGPU[strm],
-                    ptgBuffer[strm],
-                    ptgBufferSize,
-                    cudaMemcpyHostToDevice, streams[strm]);
-            //);
-        }
-        for(strm = 0; strm < cfg.nStreams; strm++)
-        {
-            std::cerr
-                << "stream: " << strm 
-                << " copying nPixelsInDisc to gpu" << std::endl;
-            // send max pixel number per-disc to gpu.
-            //CUDA_ERROR_CHECK(
-                cudaMemcpyAsync(
-                    nPixelsInDiscGPU[strm],
-                    nPixelsInDisc[strm],
-                    nPixelInDiscBufferSize,
-                    cudaMemcpyHostToDevice, streams[strm]);
-            //);
-        }
-        for(strm = 0; strm < cfg.nStreams; strm++)
-        {
-            std::cerr 
-                << "stream: " << strm 
-                << " copying skyPixelsInBeam to gpu" << std::endl;
-            // send sky pixels in beam to gpu.
-            //CUDA_ERROR_CHECK(
-                cudaMemcpyAsync(
-                    skyPixelsInBeamGPU[strm],
-                    skyPixelsInBeam[strm],
-                    skyPixelsInBeamBufferSize,
-                    cudaMemcpyHostToDevice, streams[strm]);
-            //);
-        }
+        // copy pointing information to GPU
         std::cerr 
-            << "stream: " << strm 
-            << " executing gpu kernel on stream " << strm 
-            << "." << std::endl;
-        // and run all the kernels
-        // calculate partial convolution of beam and sky
-        for(strm = 0; strm < cfg.nStreams; strm++)
-        {
-            CUDACONV::streamed_beam_times_sky(
-                cfg,
-                ptgBufferGPU[strm],
-                beam->get_nside(), beam->size(), 
-                aBeamsGPU, bBeamsGPU,
-                sky->get_nside(), skyGPU, 
-                skyPixelsInBeamGPU[strm], nPixelsInDiscGPU[strm],
-                streams[strm],
-                resultGPU[strm]);
-        }
-        // bring the data from GPU back to the host buffer.
-        /** why so serial! **/
-        // explicitly disable dynamic teams!
-        //omp_set_dynamic(0);     
-        // Use nStreams threads for all consecutive parallel regions
-        //omp_set_num_threads(cfg.nStreams); 
-        //#pragma omp parallel default(shared) private(strm)
-       // {
-        for(strm = 0; strm < cfg.nStreams; strm++)
-        {
-            //strm = omp_get_thread_num();
-            std::cerr 
-                << "stream: " << strm 
-                << " copying data back." << std::endl;
-            if(beam->enabledDets == 'a' || beam->enabledDets == 'p')
-            {
-                CUDA_ERROR_CHECK
-                (
-                    cudaMemcpyAsync(
-                        &(data_a[samp + strm * ptgPerConv]),
-                        &(resultGPU[strm][0]),
-                        resultBufferSize / 2,
-                        cudaMemcpyDeviceToHost, 
-                        streams[strm])
-                );
-            }
-            if(beam->enabledDets == 'b' || beam->enabledDets == 'p')
-            {
-                CUDA_ERROR_CHECK
-                (
-                    cudaMemcpyAsync(
-                        &(data_b[samp + strm * ptgPerConv]),
-                        &(resultGPU[strm][ptgPerConv]),
-                        resultBufferSize / 2,
-                        cudaMemcpyDeviceToHost, 
-                        streams[strm])
-                );
-            }
-        }
+            << "copying ptgBuffer to gpu" << std::endl;
+        CUDA_ERROR_CHECK
+        (
+            cudaMemcpy(
+                ptgBufferGPU,
+                &(bcptg[N_POINTING_COORDS * samp]),
+                ptgBufferSize,
+                cudaMemcpyHostToDevice)
+        );
+        // copy intra-beam sky pixel buffer to gpu
+        std::cerr
+            << " copying nPixelsInDisc to gpu" << std::endl;
+        CUDA_ERROR_CHECK
+        (
+            cudaMemcpy(
+                nPixelsInDiscGPU,
+                nPixelsInDisc,
+                nPixelInDiscBufferSize,
+                cudaMemcpyHostToDevice)
+        );
+        // Copy intra-beam sky pixel buffers to gpu
+        std::cerr << " copying skyPixelsInBeam to gpu" << std::endl;
+        CUDA_ERROR_CHECK
+        (
+            cudaMemcpy(
+                skyPixelsInBeamGPU,
+                skyPixelsInBeam,
+                skyPixelsInBeamBufferSize,
+                cudaMemcpyHostToDevice)
+        );
+        // kernel execution
+        std::cerr << " executing gpu kernel." << std::endl;
+
+        CUDACONV::launch_fill_pixel_matching_matrix_kernel
+        (
+            ptgPerConv, ptgBufferGPU,
+            nsideSky, nsideBeam,
+            pixPerDisc, nPixelsInDiscGPU, skyPixelsInBeamGPU,
+            matchingBeamPixelsGPU, chiAnglesGPU
+        );
+        CUDA_ERROR_CHECK
+        (
+            cudaMemset(resultGPU, 0, 2 * resultBufferSize)
+        );
+        CUDACONV::launch_partial_polarized_convolution_kernel
+        (
+           nsideSky, npixSky, skyGPU,
+           nsideBeam, npixBeam, aBeamsGPU, bBeamsGPU,
+           ptgPerConv, pixPerDisc, 
+           nPixelsInDiscGPU, skyPixelsInBeamGPU,
+           matchingBeamPixelsGPU, chiAnglesGPU,
+           // output
+           &(resultGPU[0]), &(resultGPU[ptgPerConv])
+        );
+
+        std::cerr 
+            << " copying data back to psb data. size = " << resultBufferSize << " bytes." << std::endl;
+        CUDA_ERROR_CHECK
+        (
+            cudaMemcpy(
+                &(data_a[samp]),
+                resultGPU,
+                resultBufferSize,
+                cudaMemcpyDeviceToHost)
+        );
+        CUDA_ERROR_CHECK
+        (
+            cudaMemcpy(
+                &(data_b[samp]),
+                &(resultGPU[ptgPerConv]),
+                resultBufferSize,
+                cudaMemcpyDeviceToHost)
+        );
+        samp += ptgPerConv;
     }
+    // synchronize to guarantee data is actually in place.
+    cudaDeviceSynchronize();
 }

@@ -1,16 +1,27 @@
 import os
+import io
 import sys
 import healpy
 import numpy
 import matplotlib.pyplot as plt
 
-nside = int(sys.argv[1])
-npix = 12 * nside * nside
-pols = sys.argv[2]
-datapath = sys.argv[3]
+pols = sys.argv[1]
+datapath = sys.argv[2]
+fwhmbeam = float(sys.argv[3])
 plotpath = os.path.basename(datapath) + ".png"
 plotpath = os.path.join(os.path.dirname(datapath), plotpath)
-Idata, Qdata, Udata, Vdata = numpy.loadtxt(datapath, unpack=True)
+
+f = open(datapath, 'r')
+fhandler = io.StringIO(f.read())
+mapData = numpy.loadtxt(fhandler)
+Idata = mapData[:, 0]
+Qdata = mapData[:, 1]
+Udata = mapData[:, 2]
+Hdata = mapData[:, 3]
+fhandler.close()
+f.close()
+npix = len(Idata)
+nside = healpy.npix2nside(npix)
 I2 = numpy.zeros_like(Idata)
 Q2 = numpy.zeros_like(Qdata)
 U2 = numpy.zeros_like(Udata)
@@ -21,7 +32,7 @@ if pols == 'U':
     U2[numpy.argmax(Idata)] = 1.0
     
 # normalize
-Is, Qs, Us = healpy.smoothing((I2, Q2, U2), fwhm=numpy.deg2rad(2.0), pol=True)
+Is, Qs, Us = healpy.smoothing((I2, Q2, U2), fwhm=numpy.deg2rad(fwhmbeam), pol=True)
 
 I1m = healpy.gnomview(Is, rot=(180, 0.0, 0.0),
     reso=2.0, xsize=200, ysize=200,

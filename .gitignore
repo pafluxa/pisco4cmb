@@ -3,3 +3,7 @@ build/
 # dependencies
 deps/
 data/*
+# executables
+*.x
+# object files
+*.o

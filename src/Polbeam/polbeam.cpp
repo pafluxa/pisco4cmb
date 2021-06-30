@@ -1,8 +1,10 @@
-#include "polbeam.hpp"
 #include <complex>
 #include <cstdlib>
+#include <cstring>
 // to make use of Healpix_base pointing
 #include <pointing.h>
+
+#include "polbeam.hpp"
 
 #ifdef POLBEAM_DUMPBEAMS
 #include <fstream>
@@ -27,12 +29,11 @@ PolBeam::PolBeam
     nPixels = _nPixels;
     epsilon = _epsilon;
     enabledDets = _enabledDets;
-    std::cerr 
-        << "DEBUG: building polbeam with dets " 
-        << enabledDets << " detectors." << std::endl;
+    std::cerr << "PolBeam::constructor: ";
+    std::cerr << "building polbeam with dets " << enabledDets;
+    std::cerr <<" detectors." << std::endl;
     pointing p = hpxBase.pix2ang(nPixels);
     rhoMax = p.theta;
-    
     alloc_buffers();
 }
 
@@ -51,33 +52,39 @@ void PolBeam::alloc_buffers()
  *
  */
 {
-    size_t buffSize = sizeof(float)*nPixels;
-    if(enabledDets == 'a' || enabledDets == 'p')
-    {
-        std::cerr 
-            << "DEBUG: allocating beams for detector a." << std::endl;
-        aBeams[0] = (float*)malloc(buffSize);
-        aBeams[1] = (float*)malloc(buffSize);
-        aBeams[2] = (float*)malloc(buffSize);
-        aBeams[3] = (float*)malloc(buffSize);
-        Ia = (float*)malloc(buffSize);
-        Qa = (float*)malloc(buffSize);
-        Ua = (float*)malloc(buffSize);
-        Va = (float*)malloc(buffSize);  
-    }
-    if(enabledDets == 'b' || enabledDets == 'p')
-    {
-        std::cerr 
-            << "DEBUG: allocating beams for detector b." << std::endl;
-        bBeams[0] = (float*)malloc(buffSize);
-        bBeams[1] = (float*)malloc(buffSize);
-        bBeams[2] = (float*)malloc(buffSize);
-        bBeams[3] = (float*)malloc(buffSize);
-        Ib = (float*)malloc(buffSize);
-        Qb = (float*)malloc(buffSize);
-        Ub = (float*)malloc(buffSize);
-        Vb = (float*)malloc(buffSize);
-    }
+    size_t buffSize = sizeof(float) * nPixels;
+    std::cerr << "PolBeam::alloc_buffers: ";
+    std::cerr << "buffer size is " << buffSize << " bytes (";
+    std::cerr << nPixels << " pixels)" << std::endl;
+    std::cerr << "PolBeam::alloc_buffers: ";
+    std::cerr << "allocating beam buffers for detector a." << std::endl;
+    aBeams[0] = (float*)malloc(buffSize);
+    aBeams[1] = (float*)malloc(buffSize);
+    aBeams[2] = (float*)malloc(buffSize);
+    aBeams[3] = (float*)malloc(buffSize);
+    Ia = (float*)malloc(buffSize);
+    Qa = (float*)malloc(buffSize);
+    Ua = (float*)malloc(buffSize);
+    Va = (float*)malloc(buffSize); 
+    std::cerr << "PolBeam::alloc_buffers: ";
+    std::cerr << "allocating beam buffers for detector b." << std::endl;
+    bBeams[0] = (float*)malloc(buffSize);
+    bBeams[1] = (float*)malloc(buffSize);
+    bBeams[2] = (float*)malloc(buffSize);
+    bBeams[3] = (float*)malloc(buffSize);
+    Ib = (float*)malloc(buffSize);
+    Qb = (float*)malloc(buffSize);
+    Ub = (float*)malloc(buffSize);
+    Vb = (float*)malloc(buffSize);
+    /* Set memory of beams to zero by default. */
+    std::memset(Ia, 0, buffSize);
+    std::memset(Ib, 0, buffSize);
+    std::memset(Qa, 0, buffSize);
+    std::memset(Qb, 0, buffSize);
+    std::memset(Ua, 0, buffSize);
+    std::memset(Ub, 0, buffSize);
+    std::memset(Va, 0, buffSize);
+    std::memset(Vb, 0, buffSize);
 }
 
 void PolBeam::free_buffers()
@@ -85,28 +92,26 @@ void PolBeam::free_buffers()
  * Routine to free all buffers before deleting the object.
  */
 {
-    if(enabledDets == 'a' || enabledDets == 'p')
-    {
-        free(Ia);
-        free(Qa);
-        free(Ua);
-        free(Va);
-        free(aBeams[0]);
-        free(aBeams[1]);
-        free(aBeams[2]);
-        free(aBeams[3]);
-    }
-    if(enabledDets == 'b' || enabledDets == 'p')
-    {
-        free(Ib);
-        free(Qb);
-        free(Ub);
-        free(Vb);
-        free(bBeams[0]);
-        free(bBeams[1]);
-        free(bBeams[2]);
-        free(bBeams[3]);
-    }
+    std::cerr << "PolBeam::free_buffers: ";
+    std::cerr << "freeing beam buffers for detector a." << std::endl;
+    free(Ia);
+    free(Qa);
+    free(Ua);
+    free(Va);
+    free(aBeams[0]);
+    free(aBeams[1]);
+    free(aBeams[2]);
+    free(aBeams[3]);
+    std::cerr << "PolBeam::free_buffers: ";
+    std::cerr << "freeing beam buffers for detector b." << std::endl;
+    free(Ib);
+    free(Qb);
+    free(Ub);
+    free(Vb);
+    free(bBeams[0]);
+    free(bBeams[1]);
+    free(bBeams[2]);
+    free(bBeams[3]);
 }
 
 void
@@ -143,6 +148,9 @@ PolBeam::beam_from_fields
     std::complex<double> Ecx;
     if(polFlag == 'a')
     {
+        std::cerr << "PolBeam::beam_from_fields: ";
+        std::cerr << "building (I,Q,U,V) beams from fields for detector a.";
+        std::cerr << std::endl;
         I = Ia;
         Q = Qa;
         U = Ua;
@@ -150,6 +158,9 @@ PolBeam::beam_from_fields
     }
     if(polFlag == 'b')
     {
+        std::cerr << "PolBeam::beam_from_fields: ";
+        std::cerr << "building (I,Q,U,V) beams from fields for detector b.";
+        std::cerr << std::endl;
         I = Ib;
         Q = Qb;
         U = Ub;
@@ -187,6 +198,8 @@ void PolBeam::build(int nsideSky)
  *
  */
 {
+    std::cerr << "PolBeam::build: ";
+    std::cerr << "building polarized beams." << std::endl;
     // compute solid angle
     double sumIa = 0;
     double sumIb = 0;
@@ -203,9 +216,24 @@ void PolBeam::build(int nsideSky)
     }   
     // compute normalization factor
     double ocmp = nsideSky / double(nside);
+    std::cerr << "PolBeam::build: ";
+    std::cerr << "solid angle of detector a = ";
+    std::cerr << sumIa * ocmp << " strad" << std::endl;
+    std::cerr << "PolBeam::build: ";
+    std::cerr << "solid angle of detector b = "; 
+    std::cerr << sumIb * ocmp << " strad" << std::endl;
     ocmp = ocmp * ocmp;
     double aNorm = sumIa * ocmp;
     double bNorm = sumIb * ocmp;
+    // hack to avoid the beam from blowing up
+    if(enabledDets == 'a')
+    {
+        bNorm += 1e-8;
+    }
+    if(enabledDets == 'b')
+    {
+        aNorm += 1e-8;
+    }
     #ifdef POLBEAM_DUMPBEAMS
     std::string dumpfilepatha = "dump_detector_a.txt";
     std::string dumpfilepathb = "dump_detector_b.txt";
@@ -219,49 +247,43 @@ void PolBeam::build(int nsideSky)
     {        
         dumpfileb.open(dumpfilepathb);
     }
-    std::cerr << "INFO: DUMPING beams." << std::endl;
+    std::cerr << "PolBeam::build: ";
+    std::cerr << "dumping beams to ./dump_detector_a.txt";
+    std::cerr << "and ./dump_detector_b.txt";
+    std::cerr << std::endl;
     #endif
-    int i;
-    for(i = 0; i < nPixels; i++)
+    std::cerr << "PolBeam::build: ";
+    std::cerr << "building polarized beams.";
+    std::cerr << std::endl;
+    for(int i = 0; i < nPixels; i++)
     {
-        if(enabledDets == 'a' || enabledDets == 'p')
-        {
-            aBeams[0][i] = (Ia[i] + epsilon*Ib[i]) / aNorm;
-            aBeams[1][i] = (Qa[i] - epsilon*Qb[i]) / aNorm;
-            aBeams[2][i] = (Ua[i] - epsilon*Ub[i]) / aNorm;
-            aBeams[3][i] = (Va[i] + epsilon*Vb[i]) / aNorm;
-            #ifdef POLBEAM_DUMPBEAMS
-            dumpfilea
-            << aBeams[0][i] << " "
-            << aBeams[1][i] << " "
-            << aBeams[2][i] << " "
-            << aBeams[3][i] << std::endl;
-            #endif
-        }
-        if(enabledDets == 'b' || enabledDets == 'p')
-        {
-            bBeams[0][i] = (Ib[i] + epsilon*Ia[i]) / bNorm;
-            bBeams[1][i] = (Qb[i] - epsilon*Qa[i]) / bNorm;
-            bBeams[2][i] = (Ub[i] - epsilon*Ua[i]) / bNorm;
-            bBeams[3][i] = (Vb[i] + epsilon*Va[i]) / bNorm;
-            #ifdef POLBEAM_DUMPBEAMS
-            dumpfileb
-            << bBeams[0][i] << " "
-            << bBeams[1][i] << " "
-            << bBeams[2][i] << " "
-            << bBeams[3][i] << std::endl;
-            #endif
-        }
+        aBeams[0][i] = (Ia[i] + epsilon * Ib[i]) / aNorm;
+        aBeams[1][i] = (Qa[i] - epsilon * Qb[i]) / aNorm;
+        aBeams[2][i] = (Ua[i] - epsilon * Ub[i]) / aNorm;
+        aBeams[3][i] = (Va[i] + epsilon * Vb[i]) / aNorm;
+        
+        bBeams[0][i] = (Ib[i] + epsilon * Ia[i]) / bNorm;
+        bBeams[1][i] = (Qb[i] - epsilon * Qa[i]) / bNorm;
+        bBeams[2][i] = (Ub[i] - epsilon * Ua[i]) / bNorm;
+        bBeams[3][i] = (Vb[i] + epsilon * Va[i]) / bNorm;
+        #ifdef POLBEAM_DUMPBEAMS
+        /* dump data for detector a. */
+        dumpfilea
+        << aBeams[0][i] << " "
+        << aBeams[1][i] << " "
+        << aBeams[2][i] << " "
+        << aBeams[3][i] << std::endl;
+        /* dump data for detector b. */
+        dumpfileb
+        << bBeams[0][i] << " "
+        << bBeams[1][i] << " "
+        << bBeams[2][i] << " "
+        << bBeams[3][i] << std::endl;
+        #endif
     }
     #ifdef POLBEAM_DUMPBEAMS
-    if(enabledDets == 'a' || enabledDets == 'p')
-    {
-        dumpfilea.close();
-    }
-    if(enabledDets == 'b' || enabledDets == 'p')
-    {        
-        dumpfileb.close();
-    }
+    dumpfilea.close();
+    dumpfileb.close();
     #endif
 }
 
@@ -325,7 +347,7 @@ void PolBeam::make_unpol_gaussian_elliptical_beams
         rho = bp.theta;
         sig = bp.phi;
         val = exp(-(a*cos(sig)*cos(sig)
-                  + 2*b*cos(sig)*sin(sig)
+                  + 2.0*b*cos(sig)*sin(sig)
                   + c*sin(sig)*sin(sig))*rho*rho);
         // build fields for a perfectly co-polarized beams
         magEco[bpix] = sqrt(val);

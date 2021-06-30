@@ -3,9 +3,9 @@
 
 Scan::Scan( 
 	long _nsamples, 
-	const float* _ra, 
-	const float* _dec, 
-	const float* _pa )
+	float* _ra, 
+	float* _dec, 
+	float* _pa )
 {
     nsamp = _nsamples;
 	ra = _ra;
@@ -13,17 +13,17 @@ Scan::Scan(
 	pa = _pa;
 }
 
-const float* Scan::get_ra_ptr() const 
+float* Scan::get_ra_ptr()  
 {
 	return ra;
 }
 
-const float* Scan::get_dec_ptr() const 
+float* Scan::get_dec_ptr()  
 {
 	return dec;
 }
 
-const float* Scan::get_pa_ptr() const 
+float* Scan::get_pa_ptr()  
 {
 	return pa;
 }

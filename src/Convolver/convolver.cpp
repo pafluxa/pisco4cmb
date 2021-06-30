@@ -8,7 +8,7 @@
 #include <arr.h>
 #include <rangeset.h>
 
-Convolver::Convolver(const Scan* _scan, const Sky* _sky, const PolBeam* _beam)
+Convolver::Convolver(Scan* _scan, Sky* _sky, PolBeam* _beam)
 {
     scan = _scan;
     sky = _sky;
@@ -23,9 +23,9 @@ void Convolver::exec_convolution(
     char polFlag, float* data_a, float* data_b)
 {
     // convenience pointers
-    const float* ra_coords = scan->get_ra_ptr();
-    const float* dec_coords = scan->get_dec_ptr();
-    const float* pa_coords  = scan->get_pa_ptr();
+    float* ra_coords = scan->get_ra_ptr();
+    float* dec_coords = scan->get_dec_ptr();
+    float* pa_coords  = scan->get_pa_ptr();
 
     #ifdef CONVOLVER_DISABLECHI
     std::cerr << "using chi = pa_bc!" << std::endl;
@@ -44,7 +44,7 @@ void Convolver::exec_convolution(
         // live inside the parallel region
         double da = 0.0;
         double db = 0.0;
-        double ra_bc   = ra_coords[i];
+        float ra_bc   = ra_coords[i];
         double dec_bc = dec_coords[i];
         // Passed arguments are counterclockwise on the sky, while
         // CMB requires clockwise arguments.
@@ -81,10 +81,11 @@ void Convolver::beam_times_sky(
     double data_b;
 
     double ra_pix, dec_pix;
-    double rho, sigma, chi, c2chi, s2chi;
+    double rho, sigma, chi;
+    float c2chi, s2chi;
 
-    double beam_a[3];
-    double beam_b[3];
+    float beam_a[3];
+    float beam_b[3];
 
     long i, ni, skyPix;
     int range_begin, range_end, rn;
@@ -101,7 +102,7 @@ void Convolver::beam_times_sky(
     data_a = 0.0;
     data_b = 0.0;
     // for every sky pixel in the beam
-    for( rn=0; rn < intraBeamRanges.nranges(); rn++ )
+    for(rn = 0; rn < intraBeamRanges.nranges(); rn++)
     {
         range_begin = intraBeamRanges.ivbegin(rn);
         range_end   = intraBeamRanges.ivend(rn);
@@ -112,22 +113,15 @@ void Convolver::beam_times_sky(
             ra_pix = sp.phi;
             dec_pix = M_PI/2.0 - sp.theta;
             // safety initializers
-            rho=0.0; sigma=0.0; chi=0.0;
+            rho = 0.0; sigma = 0.0; chi = 0.0;
             // compute rho sigma and chi at beam pixel
             SphericalTransformations::rho_sigma_chi_pix(
                 &rho, &sigma, &chi,
                 ra_bc, dec_bc, pa_bc,
                 ra_pix, dec_pix);
-            #ifdef CONVOLVER_DISABLECHI
-            chi = pa_bc;
-            #endif
-            c2chi = cos(2.0*chi);
-            s2chi = sin(2.0*chi);
-            // safety initializers
-            std::memset(beam_a, 0.0, sizeof(double)*3);
-            std::memset(beam_b, 0.0, sizeof(double)*3);
-            // interpolate beam at (rho,sigma)
-            pointing bp(rho, sigma);
+            c2chi = cos(2.0 * chi);
+            s2chi = sin(2.0 * chi);
+            /* interpolate beam at (rho,sigma)
             beam->hpxBase.get_interpol(bp, neigh, wgh);
             for(int b=0; b < 3; b++)
             {
@@ -150,25 +144,25 @@ void Convolver::beam_times_sky(
                     beam_b[b] /= ws;
                 }
             }
-            /**
-            int beampix = beam->hpxBase->ang2pix(bp);
-            beam_a[0] = beam->aBeams[0][beampix];
-            beam_a[1] = beam->aBeams[1][beampix];
-            beam_a[2] = beam->aBeams[2][beampix];
-            beam_b[0] = beam->bBeams[0][beampix];
-            beam_b[1] = beam->bBeams[1][beampix];
-            beam_b[2] = beam->bBeams[2][beampix];
-            **/
-            data_a = data_a
-              + sky->sI[skyPix]*(beam_a[0])
-              + sky->sQ[skyPix]*(beam_a[1]*c2chi - beam_a[2]*s2chi)
-              + sky->sU[skyPix]*(beam_a[2]*c2chi + beam_a[1]*s2chi);
-
-            data_b = data_b
-              + sky->sI[skyPix]*(beam_b[0])
-              + sky->sQ[skyPix]*(-beam_b[1]*c2chi + beam_b[2]*s2chi)
-              + sky->sU[skyPix]*(-beam_b[2]*c2chi - beam_b[1]*s2chi);
-
+            */
+            pointing bp(rho, sigma);
+            int bpix = beam->hpxBase.ang2pix(bp);
+            if(bpix < beam->nPixels)
+            {
+                for(int b = 0; b < 3; b++)
+                {
+                    beam_a[b] = beam->aBeams[b][bpix];
+                    beam_b[b] = beam->bBeams[b][bpix];
+                }
+                data_a += 
+                    sky->sI[skyPix]*(beam_a[0])
+                  + sky->sQ[skyPix]*(beam_a[1]*c2chi - beam_a[2]*s2chi)
+                  + sky->sU[skyPix]*(beam_a[2]*c2chi + beam_a[1]*s2chi);
+                data_b += 
+                    sky->sI[skyPix]*(beam_b[0])
+                  + sky->sQ[skyPix]*(-beam_b[1]*c2chi + beam_b[2]*s2chi)
+                  + sky->sU[skyPix]*(-beam_b[2]*c2chi - beam_b[1]*s2chi);
+            }
             #ifdef CONVOLVER_DEBUG
             if((abs(ra_bc - M_PI + 0.3 / 32.0) < 1.0e-4) && (abs(dec_bc - 0.3 / 32.0) < 1.0e-4) && (sky->sI[skyPix] != 0.0)) 
             {

@@ -1,43 +1,81 @@
-#include "healpix_math.h"
-#include "healpix_utils.h"
+#include "cudaHealpix.h"
+
+/* these functions and directives are declared here and not in the 
+ * header because they could cause name conflicts with the actual 
+ * Healpix_Base functions. */
+#define twothird   (2.0 / 3.0)
+#define pi         (3.141592653589793238462643383279502884197)
+#define twopi      (6.283185307179586476925286766559005768394)
+#define half_pi    (1.570796326794896619231321691639751442099)
+#define inv_halfpi (0.636619772367581343075535053490057400000)
+
+__device__ int isqrt(int v);
+__device__ int imodulo(int v1, int v2);
+__device__ int ring_above(int nside_, double z);
+__device__ void pix2ang_ring_z_phi
+(
+    int nside_, int pix, double *z, double *phi
+);
+__device__ int ang2pix_ring_z_phi
+(
+    int nside_, double z, double phi, double sth
+);
+__device__ void get_ring_info2
+(
+    int nside_, int ring, int *startpix, int *ringpix, double *theta, 
+    bool *shifted
+);
 
 // Ported from Healpix_base.cc
 __device__ int
-ring_above (int nside_, float z) 
+imodulo (int v1, int v2)
+{
+    int v = v1 % v2;
+    return (v >= 0) ? v : v + v2;
+}
+
+// Ported from Healpix_base.cc
+__device__ int
+isqrt(int v)
+{
+    return int(sqrt((double)(v) + 0.5));
+}
+
+// Ported from Healpix_base.cc
+__device__ int ring_above (int nside_, double z) 
 {                                                                                                           
-  float az = fabs(z);                                                                                           
+  double az = fabs(z);                                                                                           
   if (az <= twothird) // equatorial region                                                                      
     return int( nside_*(2-1.5*z) );                                                                               
 
-  int iring = int(nside_ * sqrtf(3 * (1 - az)));                                                                         
+  int iring = int(nside_ * sqrt(3 * (1 - az)));                                                                         
   return (z > 0) ? iring : 4 * nside_ - iring - 1;                                                                    
 }  
 
 // Ported from Healpix_base.cc
-__device__ void 
-pix2ang_ring_z_phi (int nside_, int pix, float *z, float *phi)                                  
+__device__ void pix2ang_ring_z_phi (int nside_, int pix, double *z, double *phi)                                  
 {                                                                                                           
 
   long ncap_ = nside_ * (nside_ - 1) * 2;                                                                             
   long npix_ = 12 * nside_ * nside_;                                                                                
-  float fact2_ = 4. / npix_;                                                                                   
+  double fact2_ = 4. / npix_;                                                                                   
 
   if (pix < ncap_) /* North Polar cap */                                                                        
     {                                                                                                         
     int iring = (1 + isqrt(1 + 2 * pix)) >> 1; /* counted from North pole */                                          
     int iphi  = (pix + 1) - 2 * iring * (iring - 1);                                                                  
                                                                                                               
-    *z = 1.0f - (iring * iring) * fact2_;                                                                          
-    *phi = (iphi - 0.5f) * half_pi / iring;                                                                         
+    *z = 1.0 - (iring * iring) * fact2_;                                                                          
+    *phi = (iphi - 0.5) * half_pi / iring;                                                                         
     }                                                                                                         
   else if (pix<(npix_-ncap_)) /* Equatorial region */                                                         
     {                                                                                                         
-    float fact1_  = (nside_ << 1) * fact2_;                                                                      
+    double fact1_  = (nside_ << 1) * fact2_;                                                                      
     int ip  = pix - ncap_;                                                                                    
     int iring = ip / (4 * nside_) + nside_; /* counted from North pole */                                         
     int iphi  = ip % (4 * nside_) + 1;                                                                            
     /* 1 if iring+nside is odd, 1/2 otherwise */                                                              
-    float fodd = ((iring + nside_) & 1) ? 1 : 0.5f;                                                               
+    double fodd = ((iring + nside_) & 1) ? 1 : 0.5;                                                               
                                                                                                               
     int nl2 = 2 * nside_;                                                                                       
     *z = (nl2 - iring) * fact1_;                                                                                  
@@ -56,16 +94,16 @@ pix2ang_ring_z_phi (int nside_, int pix, float *z, float *phi)
 
 // Ported from Healpix_base.cc
 __device__ int 
-ang2pix_ring_z_phi ( int nside_, float z, float phi, float sth )
+ang2pix_ring_z_phi ( int nside_, double z, double phi, double sth )
 {
   
-  float za = fabs(z);
-  float tt = fmod(phi * inv_halfpi, 4.0f); /* in [0,4) */
+  double za = fabs(z);
+  double tt = fmod(phi * inv_halfpi, 4.0); /* in [0,4) */
 
   if (za <= twothird) /* Equatorial region */
     {
-    float temp1 = nside_ * (0.5 + tt);
-    float temp2 = nside_ * z * 0.75;
+    double temp1 = nside_ * (0.5 + tt);
+    double temp2 = nside_ * z * 0.75;
     int jp = int(temp1 - temp2); /* index of  ascending edge line */
     int jm = int(temp1 + temp2); /* index of descending edge line */
 
@@ -80,15 +118,15 @@ ang2pix_ring_z_phi ( int nside_, float z, float phi, float sth )
     }
   else  /* North & South polar caps */
     {
-    float tp = tt - int(tt);
-    float tmp = -1;
-    if( za < 0.990f )
-      tmp = nside_ * sqrtf(3.0f * (1.0f - za));
+    double tp = tt - int(tt);
+    double tmp = -1;
+    if( za < 0.990 )
+      tmp = nside_ * sqrt(3.0 * (1.0 - za));
     else
-      tmp = nside_ * sth / sqrtf((1.0f + za) / 3.0f);
+      tmp = nside_ * sth / sqrt((1.0 + za) / 3.0);
 
     int jp = int(tp * tmp); /* increasing edge line index */
-    int jm = int((1.0f - tp) * tmp); /* decreasing edge line index */
+    int jm = int((1.0 - tp) * tmp); /* decreasing edge line index */
 
     int ir = jp + jm + 1; /* ring number counted from the closest pole */
     int ip = int(tt * ir); /* in {1,4*ir-1} */
@@ -106,10 +144,8 @@ ang2pix_ring_z_phi ( int nside_, float z, float phi, float sth )
     }
 }
 
-#ifdef CUDACONV_USE_INTERPOLATION
 // Ported from Healpix_base.cc
-__device__ void
-get_ring_info2 (int nside_, int ring, int *startpix, int *ringpix, double *theta, bool *shifted)
+__device__ void get_ring_info2 (int nside_, int ring, int *startpix, int *ringpix, double *theta, bool *shifted)
 {
   long ncap_=nside_*(nside_-1)*2;
   long npix_=12*nside_*nside_;
@@ -139,27 +175,25 @@ get_ring_info2 (int nside_, int ring, int *startpix, int *ringpix, double *theta
     *startpix = npix_ - *startpix - *ringpix;
     }
 }
-#endif
 
 // Ported from Healpix_base.cc
-__device__ int cudaHealpix::ang2pix(int nside_map, float tht, float phi)
+__device__ int cudaHealpix::ang2pix(int nside_map, double tht, double phi)
 {
     int map_pix;
-    float cth = cosf(tht);
-    float sth = sinf(tht);
+    double cth = cos(tht);
+    double sth = sin(tht);
     map_pix = (int)(ang2pix_ring_z_phi( nside_map, cth, phi, sth));
     return map_pix;
 }
 
 // Ported from Healpix_base.cc
-__device__ void cudaHealpix::pix2ang(long nside, long ipix, float *theta, float *phi)                                          
+__device__ void cudaHealpix::pix2ang(long nside, long ipix, double *theta, double *phi)                                          
 {                                                                                                           
-  float z;                                                                                                   
-  pix2ang_ring_z_phi (nside,ipix,&z,phi);                                                                     
-  *theta = acosf(z);                                                                                             
+  double z;                                                                                                   
+  pix2ang_ring_z_phi (nside, ipix, &z, phi);                                                                     
+  *theta = acos(z);                                                                                             
 }
 
-#ifdef CUDACONV_USE_INTERPOLATION
 // Ported from Healpix_base.cc
 __device__ void cudaHealpix::get_interpol( int nside_, double theta, double phi, int pix[4], double wgt[4] )
 {
@@ -223,4 +257,5 @@ __device__ void cudaHealpix::get_interpol( int nside_, double theta, double phi,
     wgt[2] *= wtheta; wgt[3] *= wtheta;                                                                       
     }                                                                                                         
 }
-#endif
+
+

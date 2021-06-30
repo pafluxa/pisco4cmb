@@ -1,6 +1,6 @@
-
 #include "skymap.hpp"
 #include <pointing.h>
+#include <cstring>
 
 #ifdef MAPPING_DEBUG
 #include <stdio.h>
@@ -23,6 +23,19 @@ SkyMap::SkyMap(int _nside) : hpx(_nside, RING, SET_NSIDE)
     nside = _nside;
     nPixels = 12 * _nside * _nside;
     allocate_buffers();
+    /*
+    for(int i = 0; i < nPixels; i++)
+    {
+        for(int k = 0; k < 9; k++)
+        {
+            AtA[9 * i + k] = 0.0;
+        }
+        for(int k = 0; k < 3; k++)
+        {
+            AtD[3 * i + k] = 0.0;
+        }
+    }
+    */
 }
 
 SkyMap::~SkyMap(void)
@@ -81,27 +94,24 @@ void SkyMap::accumulate_data
              * CMB convention requires clockwise positive. */
             _psi   = -(pol_angle + pa[det * nSamples + sample]);
             mapPixel = hpx.ang2pix(ptgpix);
-            if(mapPixel >= 0)
-            {
-                d = data[det * nSamples + sample];
-                twopsi = 2.0 * _psi;
-                c2psi = cos(twopsi);
-                s2psi = sin(twopsi);
-                /* update AtD. */
-                AtD[mapPixel * 3 + 0] += 1.0   * d;
-                AtD[mapPixel * 3 + 1] += c2psi * d;
-                AtD[mapPixel * 3 + 2] += s2psi * d;
-                /* update matrix. */
-                AtA[mapPixel * 9 + 0] += 1.0;
-                AtA[mapPixel * 9 + 1] += c2psi;
-                AtA[mapPixel * 9 + 2] += s2psi;
-                AtA[mapPixel * 9 + 3] += c2psi;
-                AtA[mapPixel * 9 + 4] += c2psi * c2psi;
-                AtA[mapPixel * 9 + 5] += c2psi * s2psi;
-                AtA[mapPixel * 9 + 6] += s2psi;
-                AtA[mapPixel * 9 + 7] += c2psi * s2psi;
-                AtA[mapPixel * 9 + 8] += s2psi * s2psi;
-            }
+            d = data[det * nSamples + sample];
+            twopsi = 2.0 * _psi;
+            c2psi = cos(twopsi);
+            s2psi = sin(twopsi);
+            /* update AtD. */
+            AtD[mapPixel * 3 + 0] += 1.0   * d;
+            AtD[mapPixel * 3 + 1] += c2psi * d;
+            AtD[mapPixel * 3 + 2] += s2psi * d;
+            /* update matrix. */
+            AtA[mapPixel * 9 + 0] += 1.0;
+            AtA[mapPixel * 9 + 1] += c2psi;
+            AtA[mapPixel * 9 + 2] += s2psi;
+            AtA[mapPixel * 9 + 3] += c2psi;
+            AtA[mapPixel * 9 + 4] += c2psi * c2psi;
+            AtA[mapPixel * 9 + 5] += c2psi * s2psi;
+            AtA[mapPixel * 9 + 6] += s2psi;
+            AtA[mapPixel * 9 + 7] += c2psi * s2psi;
+            AtA[mapPixel * 9 + 8] += s2psi * s2psi;
         }
     }
     #ifdef MAPPING_DEBUG
@@ -141,7 +151,7 @@ void SkyMap::solve_map(void)
     int idx;
     double ra_pix, dec_pix; 
     double degr = 180.0 / M_PI;
-    pointing ptg;
+    pointing ptgpix;
     long CENTER_INDEX;
     #endif
     for(mapPixel = 0; mapPixel < nPixels; mapPixel++)
@@ -186,13 +196,11 @@ void SkyMap::solve_map(void)
             /* handle case where dgesv_ fails to solve the system. */
             if(info != 0)
             {
-                std::cerr << "The diagonal element of the";
-                std::cerr << " triangular factor of A,\n";
-                std::cerr 
-                    << "AtA_pix(" << info << "," << info 
-                    << " is zero, so that A is singular;" 
-                    << "the solution could not be computed" 
-                    << std::endl;
+                std::cerr << "error on pixel " << mapPixel << std::endl;
+                int idx = mapPixel;
+                printf("AtA: %le %le %le \n"  , AtA[idx*9 + 0], AtA[idx*9 + 1], AtA[idx*9 + 2]);
+                printf("     %le %le %le \n"  , AtA[idx*9 + 3], AtA[idx*9 + 4], AtA[idx*9 + 5]);
+                printf("     %le %le %le \n\n", AtA[idx*9 + 6], AtA[idx*9 + 7], AtA[idx*9 + 8]);
                 /* ill-conditioned pixels are not taken into account as
                  * valid pixels, so the hits are set to zero. */
                 hits = 0;
@@ -202,9 +210,9 @@ void SkyMap::solve_map(void)
          * coverage flag). Hits are not touched. */
         else 
         {
-            std::cerr 
-                << "WARNING: pixel " << mapPixel 
-                << "has less than 3 hits." << std::endl;
+            //std::cerr 
+            //    << "WARNING: pixel " << mapPixel 
+            //    << " has less than 3 hits." << std::endl;
             ii = SkyMap::INSUFFCOV;
             qq = SkyMap::INSUFFCOV;
             uu = SkyMap::INSUFFCOV;
@@ -215,7 +223,9 @@ void SkyMap::solve_map(void)
         hitsMap[mapPixel] = hits;
     }
     #ifdef MAPPING_DEBUG
-    idx = int(CENTER_INDEX);
-    printf("I Q U: %le %le %le \n", stokesI[idx], stokesQ[idx], stokesU[idx]);
+    ptgpix.phi = M_PI;
+    ptgpix.theta = M_PI_2;
+    CENTER_INDEX = hpx.ang2pix(ptgpix);
+    printf("I Q U: %le %le %le \n", stokesI[CENTER_INDEX], stokesQ[CENTER_INDEX], stokesU[CENTER_INDEX]);
     #endif
 }

@@ -12,7 +12,7 @@
 
 class SkyMap
 {
-    const int INSUFFCOV = -10;
+    const int INSUFFCOV = 0;
     
     public:
         SkyMap(int _nside); 

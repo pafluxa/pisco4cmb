@@ -1,9 +1,10 @@
 #!/bin/bash
 TAG="test_nstreams-5"
 nsideIn=128
-nsideOut=128
-beamnside=512
-beamfwhm_deg=0.6604
+#nsideOut=128
+beamnside=2048
+#beamfwhm_deg=0.6604
+beamfwhm_deg=2.0
 scan=wholesky 
 det=p
 # valid values are ON and OFF (yes, capitalized)
@@ -34,39 +35,26 @@ cp data/beams/offset_ref/hpx_tilde_beams_det_b.txt \
   "output/beam_b.txt" || exit 1
 # build sky
 python scripts/create_cmb.py $nsideIn || exit 1
-cp data/cls/cl_data.csv output/ || exit 1
-mv input_dl.png output/ || exit 1
-mv input_maps.png output/ || exit 1
-mv input_ps.png output/ || exit 1
-mv cmb.txt output/ || exit 1
-mv cl_data.csv output/ || exit 1
+#cp data/cls/cl_data.csv output/ || exit 1
+#mv input_dl.png output/ || exit 1
+#mv input_maps.png output/ || exit 1
+#mv input_ps.png output/ || exit 1
+#mv cmb.txt output/ || exit 1
+#mv cl_data.csv output/ || exit 1
+mv cmb.txt output/cmb.txt
 # execute simulation
 echo "running detector "$det" for wholesky simulation "$TAG
 program=simulate_wholesky_scan.x
 time "./build/"$program \
   -m "output"/cmb.txt \
   -p $det \
-  -o "output/MAPS_det_"$det"_scan_"$scan".map" \
-  -t f \
-  -a output/beam_a.txt \
-  -b output/beam_b.txt || exit 1
+  -o "output/TOD_det_"$det"_scan_"$scan".tod" \
+  -t g \
+  -a $beamfwhm_deg \
+  -b $beamfwhm_deg || exit 1
 #   > "output/STDOUT_det_"$det"_scan_"$scan".txt" || exit 1
-# move dumped beams to output folder
-mv dump_detector_a.txt output/
-mv dump_detector_b.txt output/
-## compute power spectra
-python scripts/compute_powerspectrum.py \
-  output/cmb.txt \
-  "output/MAPS_det_"$det"_scan_"$scan".map" \
-  "output/"dump_detector_a.txt $beamnside $beamfwhm_deg
-# move resulting power spectra to output folder
-mv ps.csv output/
-# plot power spectra
-python scripts/plot_powerspectrum.py output/ps.csv output/cl_data.csv
-# move things to final directory
-mv ps.png output/
-#mkdir $TAG
-#cp -r output/* $TAG"/"
+python scripts/plot_tod.py "output/TOD_det_"$det"_scan_"$scan".tod" 
+  $beamfwhm_deg
 # none of this ever happened, gentlemen
 #rm -r output/*
 exit 0

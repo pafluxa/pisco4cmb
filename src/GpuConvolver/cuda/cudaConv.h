@@ -20,25 +20,33 @@ namespace CUDACONV
     };
     typedef struct CUDACONVConf_t RunConfig;
 
+    __device__ void
+    skypixel_to_beampixel_and_chi
+    (
+        float rabc, float decbc, float pabc,
+        int skypix,
+        int nsideBeam, int nsideSky,
+        int *beampix, float* chi
+    );
+
+    __global__ void
+    fill_pixel_matching_matrix
+    (
+        int nptgs, float* ptgBuffer,
+        int nsideSky, int nsideBeam,
+        int maxPixelsPerDisc, int pixelsPerDisc[], int intraBeamSkyPixels[],
+        // output
+        int matchingBeamPixels[], float chi[]
+    );
+     
     extern "C" void 
     beam_times_sky(
         CUDACONV::RunConfig cfg, 
-        float* ptgBuffer,
+        int nptgs, float* ptgBuffer,
         int bnside, int bnpixels, 
         float* beamsA, float* beamsB, 
         int skynside, float* sky,
         int* intraBeamPixels, int* maxIntraBeamPix,
-        float *data);
-        
-    extern "C" void 
-    streamed_beam_times_sky(
-        CUDACONV::RunConfig cfg, 
-        float* ptgBuffer,
-        int bnside, int bnpixels, 
-        float* beamsA, float* beamsB, 
-        int skynside, float* sky,
-        int* intraBeamPixels, int* maxIntraBeamPix,
-        cudaStream_t stream,
-        float *data);
+        float data[]);
 }
 #endif
