@@ -156,8 +156,8 @@ partial_polarized_convolution
     iy = blockIdx.y * blockDim.y + threadIdx.y;
     while(iy < nptgs)
     {
-        shA[threadIdx.y][threadIdx.x] = 0;
-        shB[threadIdx.y][threadIdx.x] = 0;
+        shA[threadIdx.y][threadIdx.x] = 0.0;
+        shB[threadIdx.y][threadIdx.x] = 0.0;
         ix = blockIdx.x * blockDim.x + threadIdx.x;
         while(ix < pixelsPerDisc[iy])
         {
@@ -176,14 +176,15 @@ partial_polarized_convolution
             Q = 0.0f;
             U = 0.0f;
             V = 0.0f;
-            // threads in the x direction process a single dot-product between
-            // the polarized sky and the polarized beam
+            // threads in the x direction process a single dot-product 
+            // between the polarized sky and the polarized beam
             skyPixel = intraBeamSkyPixels[maxPixelsPerDisc * iy + ix];
             beamPixel = matchingBeamPixels[maxPixelsPerDisc * iy + ix];
             chi = chiAngles[maxPixelsPerDisc * iy + ix];
+            // being cheap here and using single precision arithmetic
             c2chi = cosf(2.0f * chi);
             s2chi = sinf(2.0f * chi);
-            // this could be replaced by texture fetching?
+            // these calls could be replaced by texture fetching maybe?
             if(skyPixel < nSkyPixels)
             {
                 I = sky[4 * skyPixel + 0];
@@ -214,8 +215,10 @@ partial_polarized_convolution
                 bbV = beamDetB[4 * beamPixel + 3];
             }
             // store result on shared buffers, for speed
-            shA[threadIdx.y][threadIdx.x] += double(I * baI + Q * baQ + U * baU + V * baV);
-            shB[threadIdx.y][threadIdx.x] += double(I * bbI + Q * bbQ + U * bbU + V * bbV);
+            shA[threadIdx.y][threadIdx.x] += 
+                double(I * baI + Q * baQ + U * baU + V * baV);
+            shB[threadIdx.y][threadIdx.x] += 
+                double(I * bbI + Q * bbQ + U * bbU + V * bbV);
             ix += blockDim.x * gridDim.x;
         }
         /* use a tree structure to do reduce along x (pixels). */
@@ -223,8 +226,10 @@ partial_polarized_convolution
         {
             if(threadIdx.x < stride) 
             {
-                shA[threadIdx.y][threadIdx.x] += shA[threadIdx.y][threadIdx.x + stride];
-                shB[threadIdx.y][threadIdx.x] += shB[threadIdx.y][threadIdx.x + stride];
+                shA[threadIdx.y][threadIdx.x] += 
+                    shA[threadIdx.y][threadIdx.x + stride];
+                shB[threadIdx.y][threadIdx.x] += 
+                    shB[threadIdx.y][threadIdx.x + stride];
             }
             __syncthreads();
         }
@@ -240,6 +245,13 @@ partial_polarized_convolution
 }
 
 void CUDACONV::launch_fill_pixel_matching_matrix_kernel
+/**
+ * Description
+ * Executes CUDA kernel that fills the pixel matching matrix, that is
+ * the matrix that has which beam pixel must be "multiplied" the
+ * corresponding sky pixel.
+ * 
+ */
 (
     int nptgs, float* ptgBuffer,
     int nsideSky, int nsideBeam,
@@ -269,6 +281,13 @@ void CUDACONV::launch_fill_pixel_matching_matrix_kernel
 }
 
 void CUDACONV::launch_partial_polarized_convolution_kernel
+/**
+ * Description
+ * Executes CUDA kernel that calculates the polarized convolution 
+ * resulting from scanning the sky using a beam with a given scan
+ * strategy. 
+ * 
+ */
 (
    int nsideSky, int nSkyPixels, float sky[],
    int nsideBeam, int nBeamPixels, float beamDetA[], float beamDetB[],

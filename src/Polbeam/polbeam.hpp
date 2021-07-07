@@ -13,39 +13,33 @@
  */
 
 // begin include guard
-#ifndef _POLBEAMH 
-#define _POLBEAMH
+#ifndef PISCO_POLBEAMH 
+#define PISCO_POLBEAMH
 
 #include <complex>
-// include healpix related routines
-#include <healpix_base.h>
+
+/* number of components in the polarized beams. */
+#define NPOLBEAMS (4)
 
 class PolBeam
 {
     public:
         PolBeam
         (
-            int _nside, long _nPixels, 
-            double _epsilon, char _enabledDets
+            int nside, long nPixels, 
+            double epsilon, char enabledDets
         );
 
        ~PolBeam();
 
-        int get_nside() const
-        {
-            return nside;
-        };
+        int get_nside() const;
+        int get_npixels() const;
+        int get_enabled_detectors() const;
+        double get_rho_max() const;
+        #ifdef USE_CUDA
+        void set_gpu_device(int devideId);
+        #endif
         
-        unsigned long size() const
-        {
-            return nPixels;
-        };
-        
-        double get_rho_max() const
-        {
-            return rhoMax;
-        };
-
         void beam_from_fields
         (
             char polFlag,
@@ -63,16 +57,21 @@ class PolBeam
             double fwhmy,
             double phi0
         );
+        
+        void load_beam_data_from_txt(std::string path);
 
-        float* aBeams[4];
-        float* bBeams[4];
-        int  nside;
-        long nPixels;
+        const float* get_beam_a() const;
+        const float* get_beam_b() const;
 
-        Healpix_Base hpxBase;
-
-        char enabledDets;
-
+        #ifdef USE_CUDA
+        void transfer_to_gpu();
+        #endif
+        
+    private:
+        
+        bool buffersOK;
+        size_t beamBufferSize;
+        
         float* Ia;
         float* Qa;
         float* Ua;
@@ -83,8 +82,13 @@ class PolBeam
         float* Ub;
         float* Vb;
 
-    private:
-
+        float* aBeams;
+        float* bBeams;
+        #ifdef USE_CUDA
+        float* cuda_aBeams;
+        float* cuda_bBeams;
+        #endif
+        
         double rhoMax;
         double epsilon;
 

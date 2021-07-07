@@ -3,38 +3,41 @@
  * 
  */
 
-#ifndef _SKYH // begin include guard
-#define _SKYH
+#ifndef PISCO_SKYH 
+#define PISCO_SKYH
 
-// include healpix related routines
-#include <healpix_base.h>
+#define NPOLSKY
 
 class Sky
 {
     public:
-        Sky( 
-            int _nside, 
-			const float* I, 
-			const float* Q, 
-			const float* U,
-			const float* V);
-       ~Sky(){};
+        Sky(int _nside); 
+       ~Sky(void);
         
-        int get_nside (void) const { return nside; };
-        int size (void) const { return nPixels; };
-
-		Healpix_Base hpxBase;
-		
-        // constant pointers to buffers
-		const float* sI;
-		const float* sQ;
-		const float* sU;
-		const float* sV;
+        int get_nside (void) const;
+        int get_npixels (void) const;
+        
+        void load_sky_data_from_txt(std::string path);
+        
+        const float* get_buffer() const;
+        
+        #ifdef USE_CUDA
+        void set_gpu_device(int devideId);
+        #endif
         
     private:
 		
+        float* skyData;
+        #ifdef USE_CUDA
+        float* cuda_skyData;
+        void transfer_to_gpu();
+        #endif
 		int nside;
         int nPixels;
+        size_t skyBufferSize;
+        
+        void alloc_buffers(void);
+        void free_buffers(void);
 };
 
-#endif // end include guard
+#endif 

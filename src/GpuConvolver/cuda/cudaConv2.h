@@ -3,10 +3,14 @@
 #include <cuda.h>
 #include <cuda_runtime.h>
 
-#define THREADS_PER_BLOCK_X 16
-#define THREADS_PER_BLOCK_Y 16
+/* Macro to define default kernel launch parameters. Modify at will to
+ * fine tune performance on different GPU architectures. The ones that
+ * come by default show optimal performance on a Quadro M6000 GPU.
+ */
+#define THREADS_PER_BLOCK_X 32
+#define THREADS_PER_BLOCK_Y 8
 #define BLOCKS_PER_GRID_X 16
-#define BLOCKS_PER_GRID_Y 128
+#define BLOCKS_PER_GRID_Y 256
 
 namespace CUDACONV
 {
