@@ -7,3 +7,5 @@ data/*
 *.x
 # object files
 *.o
+# tar.gz
+*.tar.gz
