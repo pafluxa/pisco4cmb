@@ -1,0 +1,17 @@
+{
+    "nside_sky" : 128,
+    "beam_detector_a": "workdir/beams/example_elliptical_beam.txt",
+    "beam_detector_b": "workdir/beams/example_elliptical_beam.txt",
+    "ra0" : 45.0,
+    "dra" : 5.0, 
+    "npoints_ra" : 32,
+    "dec0" : 0.0,
+    "ddec" : 5.0,
+    "npoints_dec" : 32,
+    "pa0" : 0.0,
+    "dpa" : 45.0,
+    "npoints_pa": 3,
+    "nside_beam" : 512,
+    "nside_output_map" : 256,
+    "output_map_path" : "workdir/output.txt"
+}

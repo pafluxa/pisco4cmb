@@ -13,83 +13,87 @@
  */
 
 // begin include guard
-#ifndef _POLBEAMH 
-#define _POLBEAMH
+#ifndef PISCO_POLBEAMH 
+#define PISCO_POLBEAMH
 
 #include <complex>
-// include healpix related routines
 #include <healpix_base.h>
 
 class PolBeam
 {
     public:
+        
+        /* constructor */
+        PolBeam(int nside);
+        /* constructor for the future */
+        /*
         PolBeam
         (
-            int _nside, long _nPixels, 
-            double _epsilon, char _enabledDets
+            int nside, long nPixels, 
+            double epsilon, char enabledDets
         );
-
+        */
+        /* destructor */
        ~PolBeam();
-
-        int get_nside() const
-        {
-            return nside;
-        };
         
-        unsigned long size() const
-        {
-            return nPixels;
-        };
-        
-        double get_rho_max() const
-        {
-            return rhoMax;
-        };
-
-        void beam_from_fields
+        /* returns nside parameter. */
+        int get_nside() const;
+        /* returns number of pixels in the beam. */
+        int get_npixels() const;
+        /* return 'a' or 'b' if only one detector is on, 'p' for both on. */
+        char get_psb_mode() const;
+        /* get beam extension on the sky. */
+        double get_rho_max() const;
+        /* returns true if buffers are allocated. */
+        bool buffers_allocated() const;
+        /* compensate for pixel size of the sky, apply pol. efficiency and normalize.*/
+        void normalize(int nsideSky);
+        /* creates (un-normalized) elliptical gaussian beam for specified detector. */
+        void make_unpol_gaussian_elliptical_beam
         (
-            char polFlag,
-            double* magEco, double* phsEco,
-            double* magEcx, double* phsEcx
-        );
-
-        void build(int nsideSky);
-
-        // this function will go away as it should live on
-        // the Python side of things.
-        void make_unpol_gaussian_elliptical_beams
-        (
+            char detector,
             double fwhmx,
             double fwhmy,
             double phi0
         );
-
-        float* aBeams[4];
-        float* bBeams[4];
-        int  nside;
-        long nPixels;
-
+        /* loads beam data from text file for specified detector. */
+        void load_beam_data_from_txt(char det, std::string path);
+        /* return I, Q, U and V for specified detector (a or b) */
+        const float* get_I_beam(char det) const;
+        const float* get_Q_beam(char det) const;
+        const float* get_U_beam(char det) const;
+        const float* get_V_beam(char det) const;
+        /* allocate buffers to store beam data. */
+        void allocate_buffers();
+        /* free beam buffers. */
+        void free_buffers();
+        
         Healpix_Base hpxBase;
-
-        char enabledDets;
-
+        
+    private:
+        /* indicates if buffers are allocated. */
+        bool buffersOK;
+        /* size (in bytes) of a single beam. */
+        size_t beamBufferSize;
+        /* beams for detector 'a'. */
         float* Ia;
         float* Qa;
         float* Ua;
         float* Va;
-
+        /* beams for detector 'b'. */
         float* Ib;
         float* Qb;
         float* Ub;
         float* Vb;
-
-    private:
-
+        /* beam extension on the sky. */
         double rhoMax;
+        /* polarization efficiency. */
         double epsilon;
-
-        void alloc_buffers();
-        void free_buffers();
+        /* PSB mode (a, b, or p). */
+        char psbmode;
+        
+        int nside;
+        int nPixels;
 };
 
 #endif // end include guard

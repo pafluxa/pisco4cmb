@@ -1,6 +1,65 @@
 #include <math.h>
 #include "sphtrigo.hpp"
 
+// definitions for floating point arithmetic
+#define M_PIF 3.141592653589793238462643383279502884e+00F
+#define M_PI_2F (M_PIF / 2.0f)
+
+void SphericalTransformations::sp_rho_sigma_chi_pix(
+    float *rho, float *sigma, float *chi,
+    float  ra_bc, float dec_bc, float psi_bc,
+    float ra_pix, float dec_pix)
+/*
+ *   Note: same code as below, but in single-precision mode. 
+ *
+ *   Calculates radial, polar offsets and position angle of the co-polarization
+ *   unit vector using Ludwig's 3rd definition at a location offset from beam center.
+ *
+ *   All outputs use the HEALPix coordinate system and the CMB polarization angle
+ *   convention as described in Fluxa et al. 2019 (https://arxiv.org/abs/1908.05662)
+ *
+ *   Outputs:  rho is the radial offset
+ *             sigma is the polar offset clockwise positive on the sky from South
+ *             chi is the position angle clockwise positive from South
+ *
+ *   Inputs:   ra_bc   Right Ascension of beam center
+ *             dec_bc  Declination of beam center
+ *             psi_bc  Position angle of beam center clockwise positive from North
+ *             ra_pix  Right Ascension of offset position
+ *             dec_pix Declination of offset position
+ *
+ *   Author: Michael K. Brewer (2019).
+ */
+{
+  float alpha, beta;
+  float cdc = cosf(dec_bc);
+  float sdc = sinf(dec_bc);
+  float cdp = cosf(dec_pix);
+  float sdp = sinf(dec_pix);
+  float dra = ra_pix - ra_bc;
+  float sd = sinf(dra);
+  float cd = cosf(dra);
+
+  float crho  = sdc * sdp + cdc * cdp * cd;
+  if(crho >= 1.0f)*rho = 0.0f;
+  else *rho = acosf(crho);
+  if(*rho > 1.0e-6f) {
+    beta  = atan2f(sd * cdc, sdc * cdp - cdc * sdp * cd);
+    alpha = atan2f(sd * cdp, sdp * cdc - cdp * sdc * cd);
+  }
+  else {
+    // atan2(0,0) returns 0 instead of pi/2
+    beta  = M_PI_2F;
+    alpha = M_PI_2F;
+  }
+  *sigma = M_PIF - alpha - psi_bc;
+  if(*sigma < 0.0f)*sigma += 2.0f * M_PIF;
+  else if(*sigma > 2.0f * M_PIF)*sigma -= 2.0f * M_PIF;
+  *chi = beta - *sigma;
+  if(*chi < -M_PIF)*chi += 2.0f * M_PIF;
+
+}
+
 void SphericalTransformations::rho_sigma_chi_pix(
     double *rho, double *sigma, double *chi,
     double  ra_bc, double dec_bc, double  psi_bc,

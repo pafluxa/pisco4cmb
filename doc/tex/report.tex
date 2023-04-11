@@ -1,0 +1,160 @@
+%----------------------------------------------------------------------------------------
+%	PACKAGES AND DOCUMENT CONFIGURATIONS
+%----------------------------------------------------------------------------------------
+\documentclass[11pt]{article}
+
+\setlength{\textheight}{9truein}
+\setlength{\topmargin}{-0.9truein}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{10pt}
+\setlength{\columnsep}{.4in}
+\newcommand{\beq}{\begin{equation}}
+	\newcommand{\eeq}{\end{equation}}
+\renewcommand{\abstractname}{}
+
+\usepackage{graphicx}
+\usepackage{url}
+\usepackage{mathtools}
+
+%----------------------------------------------------------------------------------------
+%	REPORT INFORMATION
+%----------------------------------------------------------------------------------------
+\title{Pixel space convolution using sparse matrices} % Report title
+\author{Pedro \textsc{Flux\'a}} % Author name(s), add additional authors like: '\& James \textsc{Smith}'
+\date{\today} % Date of the report
+
+
+
+\begin{document}
+\pagestyle{plain}
+\maketitle
+\setlength{\parindent}{0pt}
+%----------------------------------------------------------------------------------------
+%	Abstract
+%----------------------------------------------------------------------------------------
+\begin{abstract} No abstract for now.
+	\vspace{.3in} 
+\end{abstract}
+
+\section{Objective}
+	
+	Propose a novel way of calculating full-sky convolution of a polarized sky with antenna beams in pixel space.
+	
+\section*{Note}
+	
+This section uses the same notation as the paper that describes PISCO.
+	
+\section{Beams of a Polarization Sensitive Bolometer}
+	
+A Polarization Sensitive Bolometer (PSB) is a detection device that uses a pair of bolometers to sense both the total intensity (Stokes parameter $I$) and the degree of linear polarization in incoming light (Stokes parameter $Q$ and $U$). Denoting each bolometer of the PSB as $a$ and $b$ we can write \footnote{cite Rossett et al and link the calculations that show this formulation is equivalent to O'Dea et al.}
+	
+\begin{eqnarray}
+	\tilde{I}_{a} &=& |\vec{E}_{a}|^2 \\
+	\tilde{I}_{b} &=& |\vec{E}_{b}|^2 \\
+	\tilde{Q}_{a} &=& |\vec{E}_{a \parallel}|^2 - |\vec{E}_{a \times}|^2 \\
+	\tilde{Q}_{b} &=& |\vec{E}_{b \parallel}|^2 - |\vec{E}_{b \times}|^2 \\
+	\tilde{U}_{a} &=& 2 \Re{\left( \vec{E}_{a \parallel} \vec{E}_{a \times} \right)} \\
+	\tilde{U}_{b} &=& 2 \Re{\left( \vec{E}_{b \parallel} \vec{E}_{b \times} \right)} \\
+	\tilde{V}_{a} &=& -2 \Im{\left( \vec{E}_{a \parallel} \vec{E}_{a \times} \right)} \\
+	\tilde{V}_{b} &=& -2 \Im{\left( \vec{E}_{b \parallel} \vec{E}_{b \times} \right)} \quad ,
+\end{eqnarray}
+
+\noindent
+where $\vec{E}$ denotes the time-averaged electric field density at co-latitude $\rho$ and longitude $\sigma$ (see \ref{fig:coordinate_systems}). 
+Subscript $\parallel$ is used to denote the co-polarized field, while $\times$ is used for the cross-polarized field. 
+
+\textsl{Maybe add a note about polarization efficiency}
+
+\section{Sky model}
+
+The sky can be modeled as a set of 4 scalar fields
+
+\begin{equation}
+	S^i = S^i(\theta, \phi) = (I, Q, U, V) \quad ,
+\end{equation}
+
+\noindent
+where $I, Q, U$ and $V$ are Stokes parameters\footnote{Note about definition of polarization} of light coming from co-latitude $\theta$
+and longitude $\phi$ in the sky basis. 
+
+\section{Coupling of sky and PSB beams in pixel space}
+
+Note that if the PSB beams and sky are considered discrete quantities, then each pixel $k$ will have an associated pair of coordinates in its corresponding basis. 
+In pixel space, the power (per unit-wavelength) measured by a PSB pointing at $\bar{q}_0$ becomes
+
+\begin{equation}
+\label{eq:coupling}
+	d_{\alpha} = \sum^{N_s}_{k=1} \prescript{}{k}{ D_{\alpha,i}(\chi, \epsilon, s_{\alpha})} \prescript{}{k}{S^{i}} \quad ,
+\end{equation}
+ 
+\noindent
+where $\alpha$ denotes $a$ and $b$.
+
+The quantity $D$ for detector $a$ is 
+\begin{equation}
+\begin{aligned}
+D_{a, i}(\chi, \epsilon, s_a) &=& \frac{s_a}{2} \big{[} \\
+ \tilde{I}_{a} + \epsilon \tilde{I}_{b} , \\
+\left(\tilde{Q}_{a} - \epsilon \tilde{Q}_{b} \right) \cos(2 \chi) - \left(\tilde{U}_{a} - \epsilon \tilde{U}_{b} \right) \sin(2 \chi) , \\
+\left(\tilde{U}_{a} - \epsilon \tilde{U}_{b} \right) \cos(2 \chi) + \left(\tilde{Q}_{a} - \epsilon \tilde{Q}_{b} \right) \sin(2 \chi) , \\
+0 \big{]} & \quad ,
+\end{aligned}
+\end{equation}
+
+\noindent
+and the quantity $D$ for detector $b$
+\begin{equation}
+	\begin{aligned}
+		D_{b, i}(\chi, \epsilon, s_b) &=& \frac{s_b}{2} \big{[} \\
+		\tilde{I}_{b} + \epsilon \tilde{I}_{a} , \\
+		-\left(\tilde{Q}_{b} - \epsilon \tilde{Q}_{a} \right) \cos(2 \chi) + \left(\tilde{U}_{b} - \epsilon \tilde{U}_{a} \right) \sin(2 \chi) , \\
+		-\left(\tilde{U}_{b} - \epsilon \tilde{U}_{a} \right) \cos(2 \chi) - \left(\tilde{Q}_{b} - \epsilon \tilde{Q}_{a} \right) \sin(2 \chi) , \\
+		0 \big{]} & \quad ,
+	\end{aligned}
+\end{equation}
+
+\section{Computation of $D$}
+
+In practice, discrete quantities such as sky and PSB beams are represented as vectors. Note that the definition of $D$ is implicitly assuming that 
+the PSB beam is aligned with the sky: more precisely, that pixel $k$ of the beam corresponds to pixel $k$ of the sky. In this sense $D$ hides a \textsl{rotation}
+of the PSB beams from the beam basis to the sky basis. 
+
+Calculating the \textsl{rotated} PSB beam can be represented as a matrix-vector product. For each component ($i$) of the beam, its rotated counterpart becomes
+
+\begin{equation}
+	\tilde{X}^{'} = \mathbf{R} \tilde{X}^{T} \quad ,
+\end{equation}
+
+\noindent
+where $\mathbf{R}$ is an $N_s \times N_b$ sparse matrix with exactly 4 non-zero entries per row\footnote{For bi-linear interpolation}.
+
+In some way, every row of $\mathbf{R}$ represents the dot-product of 4 pixels from the PSB beam component (North, South, East and West pixels around $\bar{q}_{0}$) 
+and their interpolation weights. Denoting $S$, $N$, $E$ and $W$ (all integers from $0$ to $N_b$) to neighbor pixels and $z_N$, $z_S$, $z_E$ and $z_W$ to
+the interpolating weights
+
+\begin{equation}
+	\prescript{}{k}{ \tilde{X}^{'} } = \prescript{}{k}{ \mathbf{R} } \tilde{X}^{T} = \big{[} 0 \cdots z_N \cdots z_S \cdots z_E \cdots z_W \cdots 0 \big{]} \cdot \tilde{X}^{T}
+\end{equation}
+
+\section{Remarks of algorithm}
+
+\begin{itemize}
+	\item Formalism is designed for full-sky convolution.
+	\item Every row of $\mathbf{R}$ can be calculated in parallel using already existing libraries (like HEALPix) 
+	\item Matrix $\mathbf{R}$ is very sparse, and can be represented efficiently using compression techniques (like CSR)
+	\item The (sparse) matrix-vector product can be calculated in accelerators, like a GPU, using existing libraries for Sparse Linear Algebra (like cuSparse from NVIDIA).
+\end{itemize}
+%
+%\begin{figure}[!h!t]
+%	\centering
+%	\includegraphics[width=\columnwidth]{Figures/placeholder.jpg}
+%	\caption{Figure of the coordinate systems.}
+%	\label{fig:coordinate_systems}
+%\end{figure} 
+	
+	
+	\section*{References}
+	
+	\url{http://www.xkcd.com/242/}
+	
+\end{document}

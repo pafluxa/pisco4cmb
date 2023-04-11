@@ -7,6 +7,11 @@ namespace SphericalTransformations
 { //begin namespace
 
 
+void sp_rho_sigma_chi_pix(
+    float   *rho, float  *sigma, float    *chi,
+    float  ra_bc, float  dec_bc, float  psi_bc,
+    float ra_pix, float dec_pix );
+
 void rho_sigma_chi_pix(
     double   *rho, double  *sigma, double    *chi,
     double  ra_bc, double  dec_bc, double  psi_bc,

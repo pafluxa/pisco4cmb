@@ -21,6 +21,7 @@ NAMES
         healpix_base.h
 PATHS
         ~/.local/include/healpix_cxx
+		/pisco4cmb/deps/Healpix_3.82/include/healpix_cxx
 )
 
 FIND_LIBRARY(HEALPIX_LIBRARIES
@@ -28,6 +29,7 @@ NAMES
         healpix_cxx
 PATHS
         ~/.local/lib
+		/pisco4cmb/deps/Healpix_3.82/lib
 )
 
 

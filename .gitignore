@@ -1,9 +1,15 @@
 # build folder
 build/
-# dependencies
-deps/
-data/*
+# working directory
+workdir/
 # executables
 *.x
 # object files
 *.o
+# dependencies in docker
+docker/dependencies
+docker/optional
+# intel oneAPI
+optional/l_BaseKit_p_2023.1.0.46401_offline.sh
+# tarballs
+*.tar.gz
