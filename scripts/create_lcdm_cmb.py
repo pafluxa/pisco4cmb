@@ -17,13 +17,14 @@ from camb import initialpower
 print('Using CAMB %s installed at %s' % (camb.__version__,os.path.dirname(camb.__file__)))
 
 out_nside = int(sys.argv[1])
-workdir = sys.argv[2]
+r = float(sys.argv[2])
+workdir = sys.argv[3]
 
 #Set up a new set of parameters for CAMB
 pars = camb.CAMBparams()
 #This function sets up CosmoMC-like settings, with one massive neutrino and helium set using BBN consistency
 pars.set_cosmology(H0=67.5, ombh2=0.022, omch2=0.122, mnu=0.06, omk=0, tau=0.06)
-pars.InitPower.set_params(As=2e-9, ns=0.965, r=0.01)
+pars.InitPower.set_params(As=2e-9, ns=0.965, r=r)
 pars.set_for_lmax(4000, lens_potential_accuracy=0)
 pars.WantTensors = True
 pars.DoLensing = False

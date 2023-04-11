@@ -27,6 +27,9 @@ class Scanning
             float ra0, float dra, 
             float dec0, float ddec, 
             float pa0, float dpa);
+
+        void make_simple_full_sky_scan(int nside, int npa, float pa0, float dpa);
+
     private:
 
 		long nsamp;

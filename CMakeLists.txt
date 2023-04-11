@@ -93,3 +93,16 @@ target_link_libraries(user_beam_point_source_scan.x
     ${CFITSIO_LIBRARIES}
     ${CUDA_cusparse_LIBRARY}
     ${CUDA_cublas_LIBRARY})
+
+# executable: 
+# convolve a user provided sky with gaussian elliptical beams without cross-pol
+cuda_add_executable(gaussian_beam_simple_full_sky.x programs/gaussian_beam_simple_full_sky.cpp)
+target_include_directories(gaussian_beam_simple_full_sky.x PRIVATE src/)
+target_link_libraries(gaussian_beam_simple_full_sky.x 
+    pisco
+    ${MKL_LIBRARIES}
+    ${HEALPIX_LIBRARIES}
+    ${CFITSIO_LIBRARIES}
+    ${CUDA_cusparse_LIBRARY}
+    ${CUDA_cublas_LIBRARY})
+

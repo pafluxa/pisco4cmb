@@ -1,6 +1,7 @@
 #include <cstdlib>
 // for healpix
 #include <healpix_base.h>
+#include <pointing>
 
 #include "Scanning/scanning.hpp"
 
@@ -67,6 +68,38 @@ void Scanning::make_raster_scan(
 				dec[idx] = tdec;
 				pa[idx] = tpa;
 			}
+		}
+	}
+}
+
+void Scanning::make_simple_full_sky_scan(int nside, int npa, float pa0, float dpa)
+{
+	int pix;
+	int idx;
+	int npix;
+	float tpa;
+	Healpix_Base hpx(nside, RING, SET_NSIDE);
+	pointing pixptg;
+
+	// set new number of samples
+	npix = 12 * nside * nside;
+	nsamp = npa * npix;
+	
+	// allocate buffers
+	allocate_buffers();
+
+	// fill buffers with raster scan
+	for(ipa = 0; ipa < npa; ipa++)
+	{
+		tpa = pa0 + dpa * float(ipa) / float(npa);
+		for(pix = 0; pix < npix; pix++)
+		{
+			idx = ipa * npix + pix;
+			pixptg = hpx.pix2ang(pix);
+			
+			ra[idx] = float(pixptg.phi);
+			dec[idx] = float(M_PI_2 - pixptg.theta);
+			pa[idx] = tpa;
 		}
 	}
 }
