@@ -63,17 +63,17 @@ int main(int argc, char* argv[])
     // beam parameters
     config.at("nside_beam").get_to(nside_beam);
     config.at("fwhm_x_a").get_to(fwhm_x_a);
-    config.at("fwhm_y_a").get_to(fwhm_x_b);
+    config.at("fwhm_y_a").get_to(fwhm_y_a);
     config.at("phi_0_a").get_to(phi_0_a);
     config.at("fwhm_x_b").get_to(fwhm_x_b);
-    config.at("fwhm_y_b").get_to(fwhm_x_b);
+    config.at("fwhm_y_b").get_to(fwhm_y_b);
     config.at("phi_0_b").get_to(phi_0_b);
     // output map
     config.at("nside_output_map").get_to(nside_output_map);
     config.at("output_map_path").get_to(output_map_path);
     // scanning
     config.at("pa0").get_to(pa0);
-    config.at("dpa").get_to(dra);
+    config.at("dpa").get_to(dpa);
     config.at("npoints_pa").get_to(npa);
 
     Scanning scan;
@@ -84,11 +84,12 @@ int main(int argc, char* argv[])
 
     // need to create scanning first
     scan.make_simple_full_sky_scan(nside_sky, npa, pa0 * DEG2RAD, dpa * DEG2RAD);
+    nsamples = scan.size();
 
-    ConvolutionEngine conv(nside_sky, nside_beam, scan.size());
+    ConvolutionEngine conv(nside_sky, nside_beam, nsamples);
     // buffers for detector data
-    data_a = (float *)malloc(sizeof(float) * scan.size());
-    data_b = (float *)malloc(sizeof(float) * scan.size());
+    data_a = (float *)malloc(sizeof(float) * nsamples);
+    data_b = (float *)malloc(sizeof(float) * nsamples);
 
     // make beams of detector a and b to be gaussian, no cross-pol
     beam.allocate_buffers();
@@ -96,8 +97,6 @@ int main(int argc, char* argv[])
     beam.make_unpol_gaussian_elliptical_beam('b', fwhm_x_b, fwhm_y_b, phi_0_b);
     beam.normalize(nside_sky);
 
-    // make sky to be a point source located at RA = 45deg, dec = 0.0 and 
-    // be polarized in Q.
     sky.allocate_buffers();
     sky.load_sky_data_from_txt(input_sky_path);
 
@@ -109,49 +108,41 @@ int main(int argc, char* argv[])
     conv.sky_to_cuspvec(&sky);
     conv.create_matrix();
 
-    auto t1s = std::chrono::steady_clock::now();
-    auto t1e = std::chrono::steady_clock::now();
-    double time_fill = 0.0;
-    double time_transfer = 0.0;
-    double time_conv = 0.0;
-    double time_wall = 0.0;
-
-    auto start = std::chrono::steady_clock::now();
     // execute convolution
-    for(s = 0; s < scan.size(); s++)
+    // first step is outside the loop to allow better concurrency
+    s = 49000;
+    conv.fill_matrix(&sky, &beam, 
+        scan.get_ra_ptr()[s], scan.get_dec_ptr()[s], scan.get_pa_ptr()[s]);
+    while(s < scan.size())
     {
-        t1s = std::chrono::steady_clock::now();
+        if(s % 1000 == 0) {
+            std::cerr << s + 1 << " / " << scan.size() << " ";
+            std::cerr << scan.get_ra_ptr()[s] * RAD2DEG << " ";
+            std::cerr << scan.get_dec_ptr()[s] * RAD2DEG << " ";
+            std::cerr << scan.get_pa_ptr()[s] * RAD2DEG << std::endl;
+
+        }
+
+        conv.exec_transfer();
+
+        conv.exec_single_convolution_step(s);
+
+        s = s + 1;
+        if(s >= scan.size())
+        {
+            break;
+        }
+
         conv.fill_matrix(&sky, &beam, 
             scan.get_ra_ptr()[s], scan.get_dec_ptr()[s], scan.get_pa_ptr()[s]);
-        t1e = std::chrono::steady_clock::now();
-        time_fill += std::chrono::duration_cast<std::chrono::microseconds>(t1e - t1s).count();
-
-        t1s = std::chrono::steady_clock::now();
-        conv.exec_transfer();
-        t1e = std::chrono::steady_clock::now();
-        time_transfer += std::chrono::duration_cast<std::chrono::microseconds>(t1e - t1s).count();
-
-        t1s = std::chrono::steady_clock::now();
-        conv.exec_single_convolution_step(s);
-        t1e = std::chrono::steady_clock::now();
-        time_conv += std::chrono::duration_cast<std::chrono::microseconds>(t1e - t1s).count();
     }
-    auto end = std::chrono::steady_clock::now();
-    time_wall = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-    // report
-    std::cerr << "Time filling matrix: " << time_fill / 1000.0 << " ms" << std::endl;
-    std::cerr << "Time transfering matrix: " << time_transfer / 1000.0 << " ms" << std::endl;
-    std::cerr << "Time using matrix: " << time_conv / 1000.0 << " ms" << std::endl;
-    std::cerr << "Time not accounted for: " << (time_fill + time_transfer + time_conv - time_wall) / 1000.0 << " ms" << std::endl;
-    std::cerr << "[INFO] Computed " << nra * ndec * npa << " samples in " << time_wall / 1000.0 << " ms ";
-    std::cerr << "(" << (nra * ndec * npa) / (time_wall / 1000000.0) << " samples/sec)" << std::endl;
 
     conv.data_to_host(data_a, data_b);
 
     // transform results to a map
-    // detector b has a polarization angle of 90 degrees.
     mapper.accumulate_data(scan.size(), 
         scan.get_ra_ptr(), scan.get_dec_ptr(), scan.get_pa_ptr(), 0.0, data_a);
+    // detector b has a polarization angle of 90 degrees.
     //mapper.accumulate_data(scan.size(), 
     //    scan.get_ra_ptr(), scan.get_dec_ptr(), scan.get_pa_ptr(), 90.0 * DEG2RAD, data_b);
     mapper.solve_map();

@@ -12,17 +12,17 @@
 #define DEG2RAD (M_PI / 180.0)
 #define RAD2DEG (1.0 / DEG2RAD)
 // sky, beam and map resolution parameters
-#define NSIDE_SKY (256)
+#define NSIDE_SKY (64)
 #define NSIDE_BEAM (512)
-#define NSIDE_MAP (256)
+#define NSIDE_MAP (64)
 // beam parameters
 #define FWHMX_DEG (3.0)
 #define FWHMY_DEG (3.0)
 #define PHI0_DEG (0.0)
 // scanning parameters
-#define NRA (8)
-#define NDEC (8)
-#define NPA (2)
+#define NRA (48)
+#define NDEC (48)
+#define NPA (3)
 #define NSAMP (NRA * NDEC * NPA)
 #define RA0_DEG (45.0)
 #define DEC0_DEG (0.0)
@@ -59,10 +59,9 @@ int main(void)
     // make sky to be a point source located at RA = 45deg, dec = 0.0 and 
     // be polarized in Q.
     sky.allocate_buffers();
-    sky.make_point_source_sky(RA0, 0.0, 1.0, 1.0, 0.0, 0.0);
+    sky.make_point_source_sky(RA0, DEC0, 1.0, 1.0, 0.0, 0.0);
 
     // make a raster scan around point source
-    // the raster grid is 10 deg x 10 deg 
     scan.make_raster_scan(NRA, NDEC, NPA, RA0, DRA, DEC0, DDEC, PA0, DPA);
 
     // setup convolution engine
@@ -72,7 +71,6 @@ int main(void)
     conv.beam_to_cuspvec(&beam);
     conv.sky_to_cuspvec(&sky);
     conv.create_matrix();
-
     
     auto t1s = std::chrono::steady_clock::now();
     auto t1e = std::chrono::steady_clock::now();
@@ -103,7 +101,7 @@ int main(void)
         time_conv += std::chrono::duration_cast<std::chrono::milliseconds>(t1e - t1s).count();
 
         s = s + 1;
-        if(s >= scan.size())
+        if(s == scan.size())
         {
             break;
         }
@@ -128,14 +126,13 @@ int main(void)
     conv.data_to_host(data_a, data_b);
 
     // transform results to a map
-    // detector b has a polarization angle of 90 degrees.
     mapper.accumulate_data(scan.size(), 
         scan.get_ra_ptr(), scan.get_dec_ptr(), scan.get_pa_ptr(), 0.0, data_a);
+    // detector b has a polarization angle of 90 degrees.
     mapper.accumulate_data(scan.size(), 
         scan.get_ra_ptr(), scan.get_dec_ptr(), scan.get_pa_ptr(), 90.0 * DEG2RAD, data_b);
     mapper.solve_map();
 
-    /*
     // output map to stdout
     float f = (1.0 * NSIDE_SKY) / (1.0 * NSIDE_MAP);
     f = f * f;
@@ -146,7 +143,6 @@ int main(void)
         std::cout << mapper.get_stokes_U()[s] * f << " ";
         std::cout << mapper.get_hitmap()[s] << std::endl;
     }
-    */
-
+    
     return 0;
 }

@@ -1,7 +1,7 @@
 #include <cstdlib>
 // for healpix
 #include <healpix_base.h>
-#include <pointing>
+#include <pointing.h>
 
 #include "Scanning/scanning.hpp"
 
@@ -55,13 +55,13 @@ void Scanning::make_raster_scan(
 	// fill buffers with raster scan
 	for(ipa = 0; ipa < npa; ipa++)
 	{
-		tpa = pa0 + dpa * float(ipa) / float(npa);
+		tpa = pa0 + dpa * float(ipa);
 		for(ira = 0; ira < nra; ira++)
 		{
-			tra = ra0 - dra / 2.0f + dra * float(ira) / float(nra);
+			tra = ra0 + dra * (float(ira) / float(nra) - 0.5f);
 			for(idec = 0; idec < ndec; idec++)
 			{
-				tdec = dec0 - ddec / 2.0f + ddec * float(idec) / float(ndec);
+				tdec = dec0 + ddec * (float(idec) / float(ndec) - 0.5f);
 
 				idx = ipa * nra * ndec + ira * ndec + idec;
 				ra[idx] = tra;
@@ -74,6 +74,7 @@ void Scanning::make_raster_scan(
 
 void Scanning::make_simple_full_sky_scan(int nside, int npa, float pa0, float dpa)
 {
+	int ipa;
 	int pix;
 	int idx;
 	int npix;
@@ -91,7 +92,7 @@ void Scanning::make_simple_full_sky_scan(int nside, int npa, float pa0, float dp
 	// fill buffers with raster scan
 	for(ipa = 0; ipa < npa; ipa++)
 	{
-		tpa = pa0 + dpa * float(ipa) / float(npa);
+		tpa = pa0 + dpa * float(ipa);
 		for(pix = 0; pix < npix; pix++)
 		{
 			idx = ipa * npix + pix;

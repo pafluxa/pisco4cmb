@@ -155,6 +155,9 @@ void Mapper::solve_map(void)
                 printf("AtA: %le %le %le \n"  , AtA[idx*9 + 0], AtA[idx*9 + 1], AtA[idx*9 + 2]);
                 printf("     %le %le %le \n"  , AtA[idx*9 + 3], AtA[idx*9 + 4], AtA[idx*9 + 5]);
                 printf("     %le %le %le \n\n", AtA[idx*9 + 6], AtA[idx*9 + 7], AtA[idx*9 + 8]);
+                printf("AtD: %le \n"  , AtD[idx * 3 + 0]);
+                printf("     %le \n"  , AtD[idx * 3 + 1]);
+                printf("     %le \n\n", AtD[idx * 3 + 2]);
                 ii = Mapper::ILLCOND;
                 qq = Mapper::ILLCOND;
                 uu = Mapper::ILLCOND;

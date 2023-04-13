@@ -94,8 +94,21 @@ void SphericalTransformations::rho_sigma_chi_pix(
   double cd = cos(dra);
 
   double crho  = sdc * sdp + cdc * cdp * cd;
-  if(crho >= 1.0)*rho = 0.0;
-  else *rho = acos(crho);
+  if(crho > 1.0)
+  {
+    *rho = 0.0;
+  }
+  else if(abs(crho - 1.0) < 1E-7)
+  {
+    *rho = 0.0;
+  }
+  else
+  {
+    *rho = acos(crho);
+  }
+  // ???
+  //if(crho >= 1.0)*rho = 0.0;
+  //else *rho = acos(crho);
   if(*rho > 1.0e-6) {
     beta  = atan2(sd * cdc, sdc * cdp - cdc * sdp * cd);
     alpha = atan2(sd * cdp, sdp * cdc - cdp * sdc * cd);

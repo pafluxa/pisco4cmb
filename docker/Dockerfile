@@ -32,7 +32,7 @@ RUN /bin/bash install_sofa.sh
 
 # install bpoint
 #RUN tar -xzvf bpoint.tar.gz
-RUN /bin/bash install_bpoint.sh 
+#RUN /bin/bash install_bpoint.sh 
 
 # install cfitsio
 RUN tar -xzvf cfitsio-4.2.0.tar.gz
@@ -58,8 +58,8 @@ RUN  echo "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu18
      rm -rf /var/lib/apt/lists/*
 
 ## create user pisco4cmb
-#RUN useradd -ms /bin/bash pisco4cmb
+RUN useradd -ms /bin/bash pisco4cmb
 # change ownership of workind directory
-#RUN chown pisco4cmb.pisco4cmb /pisco4cmb/workdir
-#USER pisco4cmb
+RUN chown pisco4cmb.pisco4cmb /pisco4cmb/workdir
+USER pisco4cmb
 WORKDIR /pisco4cmb/workdir

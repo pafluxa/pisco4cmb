@@ -22,7 +22,7 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 # directives to find required packages
 # CUDA is required
 find_package(CUDA REQUIRED)
-set(CMAKE_CUDA_ARCHITECTURES native)
+set(CMAKE_CUDA_ARCHITECTURES 52)
 # OpenMP is required
 find_package(OpenMP REQUIRED)
 # HealPIX is required (cfitsio too)
@@ -96,7 +96,7 @@ target_link_libraries(user_beam_point_source_scan.x
 
 # executable: 
 # convolve a user provided sky with gaussian elliptical beams without cross-pol
-cuda_add_executable(gaussian_beam_simple_full_sky.x programs/gaussian_beam_simple_full_sky.cpp)
+cuda_add_executable(gaussian_beam_simple_full_sky.x programs/gauss_beam_simple_full_sky.cpp)
 target_include_directories(gaussian_beam_simple_full_sky.x PRIVATE src/)
 target_link_libraries(gaussian_beam_simple_full_sky.x 
     pisco

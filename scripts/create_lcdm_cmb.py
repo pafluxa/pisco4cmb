@@ -68,10 +68,11 @@ I,Q,U = healpy.synfast((cl_TT_in, cl_EE_in, cl_BB_in, cl_TE_in), out_nside, pol=
 # Poor V, always zero
 V = numpy.zeros_like(I)
 # Make some noise (plots)
-fig_maps = plt.figure(0)
-healpy.mollview(I, sub=(1,3,1), fig=fig_maps)
-healpy.mollview(Q, sub=(1,3,2), fig=fig_maps)
-healpy.mollview(U, sub=(1,3,3), fig=fig_maps)
+fig_maps = plt.figure(0, figsize=(12, 9))
+healpy.mollview(I, sub=(3,1,1), fig=fig_maps)
+healpy.mollview(Q, sub=(3,1,2), fig=fig_maps)
+healpy.mollview(U, sub=(3,1,3), fig=fig_maps)
+fig_maps.tight_layout()
 plt.savefig(os.path.join(workdir, "input_maps.png"))
 
 # Check output CL's are consistent with input
@@ -104,7 +105,7 @@ fig.tight_layout()
 plt.savefig(os.path.join(workdir, "input_ps.png"))
 
 data = numpy.vstack([I, Q, U, V])
-numpy.savetxt('cmb.txt', data.T)
+numpy.savetxt(os.path.join(workdir, 'cmb.txt'), data.T)
 
 psdata = pandas.DataFrame()
 psdata['cl_TT'] = cl_TT_in

@@ -267,6 +267,8 @@ void ConvolutionEngine::data_to_host(float *a, float *b)
     qb = (float *)malloc(sizeof(float) * nSamples);
     ub = (float *)malloc(sizeof(float) * nSamples);
 
+    CATCH_CUDA( cudaDeviceSynchronize() )
+
     CATCH_CUDA(cudaMemcpy(ia, dev_ia, sizeof(float) * nSamples, cudaMemcpyDeviceToHost))
     CATCH_CUDA(cudaMemcpy(qa, dev_qa, sizeof(float) * nSamples, cudaMemcpyDeviceToHost))
     CATCH_CUDA(cudaMemcpy(ua, dev_ua, sizeof(float) * nSamples, cudaMemcpyDeviceToHost))
@@ -345,9 +347,8 @@ void ConvolutionEngine::fill_matrix(Sky* sky, PolBeam* beam,
     pointing bp;
     fix_arr<int, 4> neigh;
     fix_arr<double, 4> wgh;
-    float* weights;
-    int* neighbors;
-    int* pixels;
+    float weights[4];
+    int neighbors[4];
     
     idx = omp_get_thread_num();
     off = omp_get_num_threads();
@@ -357,19 +358,15 @@ void ConvolutionEngine::fill_matrix(Sky* sky, PolBeam* beam,
     if(idx == omp_get_thread_num() - 1) {
         reminder += (nspix - chunksize * off);
     }
-    // allocate local (thread-safe) memory space to store results
-    pixels = (int *)malloc(sizeof(int) * (chunksize + reminder));
-    neighbors = (int *)malloc(sizeof(int) * 4 * (chunksize + reminder));
-    weights = (float *)malloc(sizeof(float) * 4 * (chunksize + reminder));
-    
+
     // Calculate equivalent beam coordinates for every sky pixel. 
     i = 0; 
     while(i < chunksize + reminder)
     {
         skyPix = idx * chunksize + i;        
         // coordinates of sky pixel already computed. 
-        ra_pix = raPixSky[skyPix];
-        dec_pix = decPixSky[skyPix];
+        ra_pix = double(raPixSky[skyPix]);
+        dec_pix = double(decPixSky[skyPix]);
 
         // get equivalent beam coordinates and polarization angle. 
         SphericalTransformations::rho_sigma_chi_pix(
@@ -378,46 +375,31 @@ void ConvolutionEngine::fill_matrix(Sky* sky, PolBeam* beam,
             ra_pix, dec_pix);
 
         // get interpolation information for beam at (rho, sigma). 
-        bp.theta = double(rho);
-        bp.phi = double(sigma);
-        // handle bug in acos
-        if(bp.theta >= M_PI) 
-        { 
-            bp.theta = double(M_PI); 
-        }
+        bp.theta = rho;
+        bp.phi = sigma;
+
         beam->hpxBase.get_interpol(bp, neigh, wgh);
 
-        weights[4*i + 0] = float(wgh[0]);    
-        weights[4*i + 1] = float(wgh[1]);    
-        weights[4*i + 2] = float(wgh[2]);    
-        weights[4*i + 3] = float(wgh[3]);
-        neighbors[4*i + 0] = neigh[0];    
-        neighbors[4*i + 1] = neigh[1];    
-        neighbors[4*i + 2] = neigh[2];    
-        neighbors[4*i + 3] = neigh[3];   
-
-        pixels[i] = skyPix;
-
-        i++;
-    }
-
-    // every thread performs memcpy in parallel
-    memcpy(csrValR + idx * 4 * chunksize, weights, sizeof(float) * (chunksize + reminder) * 4);
-    memcpy(csrColIndR + idx * 4 * chunksize, neighbors, sizeof(int) * (chunksize + reminder) * 4);
-    memcpy(csrRowPtrR + idx * chunksize, pixels, sizeof(int) * (chunksize + reminder));
-    
-    free(weights);
-    free(neighbors);
-    free(pixels);
-    /*
-    {
+        weights[0] = float(wgh[0]);    
+        weights[1] = float(wgh[1]);    
+        weights[2] = float(wgh[2]);    
+        weights[3] = float(wgh[3]);
+        neighbors[0] = neigh[0];    
+        neighbors[1] = neigh[1];    
+        neighbors[2] = neigh[2];    
+        neighbors[3] = neigh[3];
+        if(rho < 1e-5){
+            fprintf(stderr, "%4.8lf  %4.8lf %4.8lf\n", rho, sigma, chi);
+            fprintf(stderr, "%d  %d  %d  %d\n", neigh[0], neigh[1], neigh[2], neigh[3]); 
+            fprintf(stderr, "%4.8lf  %4.8lf  %4.8lf  %4.8lf\n", wgh[0], wgh[1], wgh[2], wgh[3]); 
+        }
         // update matrix values 
         update_matrix(skyPix, weights, neighbors);
-        update_chi(skyPix, chi);
+        update_chi(skyPix, float(chi));
 
         i++;
     }
-    */
+
     }
 }
 
@@ -425,9 +407,6 @@ void ConvolutionEngine::fill_matrix(Sky* sky, PolBeam* beam,
 void ConvolutionEngine::exec_transfer(void) {
 
     size_t bytes;
-
-    // synchronize device to avoid writing while computing
-    CATCH_CUDA( cudaDeviceSynchronize() )
 
     // fill last value of csrRowPtrR
     csrRowPtrR[nspix] = 4 * nspix;
@@ -449,6 +428,11 @@ void ConvolutionEngine::exec_transfer(void) {
 void ConvolutionEngine::exec_single_convolution_step(int s) {
 
     size_t bufferSize;
+
+    CATCH_CUDA(cudaDeviceSynchronize())
+    CATCH_CUDA(cudaGetLastError())
+
+    //CATCH_CUSPARSE( cusparseSetStream(cuspH, procStreams[0]) )
 
     // set cuSparse to run in device mode so all memory operations
     // happen in the GPU (fully async)
@@ -479,12 +463,13 @@ void ConvolutionEngine::exec_single_convolution_step(int s) {
     // capture graph execution
     if(useGraph)
     {
-        CATCH_CUDA( cudaGraphLaunch(graph_exec, procStreams[0]) )
+        //CATCH_CUDA( cudaGraphLaunch(graph_exec, procStreams[0]) )
     }
     else
     {
-        CATCH_CUSPARSE( cusparseSetStream(cuspH, procStreams[0]) )
-        CATCH_CUDA( cudaStreamBeginCapture(procStreams[0], cudaStreamCaptureModeGlobal) )
+        //CATCH_CUSPARSE( cusparseSetStream(cuspH, procStreams[0]) )
+        //CATCH_CUDA( cudaStreamBeginCapture(procStreams[0], cudaStreamCaptureModeGlobal) )
+
         // Detector a
         // calculate R x beam for Stokes I beam of detector a
         CATCH_CUSPARSE(
@@ -495,7 +480,8 @@ void ConvolutionEngine::exec_single_convolution_step(int s) {
                 CUSPARSE_SPMV_CSR_ALG2, 
                 dev_tempBuffer)
         )
-
+        CATCH_CUDA(cudaDeviceSynchronize())
+        CATCH_CUDA(cudaGetLastError())
         // Stokes Q beam of detector a ...
         CATCH_CUSPARSE(
             cusparseSpMV(cuspH,
@@ -505,6 +491,8 @@ void ConvolutionEngine::exec_single_convolution_step(int s) {
                 CUSPARSE_SPMV_CSR_ALG2, 
                 dev_tempBuffer)
         )
+        CATCH_CUDA(cudaDeviceSynchronize())
+        CATCH_CUDA(cudaGetLastError())
         // Stokes U beam of detector a
         CATCH_CUSPARSE(
             cusparseSpMV(cuspH,
@@ -514,6 +502,8 @@ void ConvolutionEngine::exec_single_convolution_step(int s) {
                 CUSPARSE_SPMV_CSR_ALG2, 
                 dev_tempBuffer)
         )
+        CATCH_CUDA(cudaDeviceSynchronize())
+        CATCH_CUDA(cudaGetLastError())
         // Repeat for detector b 
         // calculate R x beam for:
         // - Stokes I beam of detector b
@@ -525,6 +515,8 @@ void ConvolutionEngine::exec_single_convolution_step(int s) {
                 CUSPARSE_SPMV_CSR_ALG2, 
                 dev_tempBuffer)
         )
+        CATCH_CUDA(cudaDeviceSynchronize())
+        CATCH_CUDA(cudaGetLastError())
         // - Stokes Q beam of detector b ...
         CATCH_CUSPARSE(
             cusparseSpMV(cuspH,
@@ -534,6 +526,8 @@ void ConvolutionEngine::exec_single_convolution_step(int s) {
                 CUSPARSE_SPMV_CSR_ALG2, 
                 dev_tempBuffer)
         )
+        CATCH_CUDA(cudaDeviceSynchronize())
+        CATCH_CUDA(cudaGetLastError())
         // - Stokes U beam of detector b
         CATCH_CUSPARSE(
             cusparseSpMV(cuspH,
@@ -543,13 +537,12 @@ void ConvolutionEngine::exec_single_convolution_step(int s) {
                 CUSPARSE_SPMV_CSR_ALG2, 
                 dev_tempBuffer)
         )
-        CATCH_CUDA(cudaStreamEndCapture(procStreams[0], &graph))
+        //CATCH_CUDA(cudaStreamEndCapture(procStreams[0], &graph))
         CATCH_CUDA(cudaDeviceSynchronize())
         CATCH_CUDA(cudaGetLastError())
-        CATCH_CUDA(cudaGraphInstantiateWithFlags(&graph_exec, graph, 0))
-        useGraph = true;
+        //CATCH_CUDA(cudaGraphInstantiateWithFlags(&graph_exec, graph, 0))
+        useGraph = false;
     }
-    //CATCH_CUDA( cudaStreamSynchronize(procStreams[0]) )
 
     // calculate D_Q for detector a
     // note: the order in which operations below are executed should not be changed
@@ -589,7 +582,7 @@ void ConvolutionEngine::exec_single_convolution_step(int s) {
     CATCH_CUBLAS(cublasSscal(cublasH, nspix, dev_subme, dev_DU2b, 1))
     // - add and overwrite DU1 = - (U c2chi + Q s2chi)
     CATCH_CUBLAS(cublasSaxpy(cublasH, nspix, dev_addme, dev_DU2b, 1, dev_DU1b, 1))
-    
+
     // convolution is now a dot product
     // - Stokes I part for detector a 
     CATCH_CUBLAS(cublasSdot(cublasH, nspix, dev_stokesI, 1, dev_AbeamIa, 1, dev_ia + s));
@@ -597,11 +590,12 @@ void ConvolutionEngine::exec_single_convolution_step(int s) {
     CATCH_CUBLAS(cublasSdot(cublasH, nspix, dev_stokesQ, 1, dev_DQ1a, 1, dev_qa + s));
     // - Stokes U part for detector a
     CATCH_CUBLAS(cublasSdot(cublasH, nspix, dev_stokesU, 1, dev_DU1a, 1, dev_ua + s));
-    
+
     // - Stokes I part for detector b 
     CATCH_CUBLAS(cublasSdot(cublasH, nspix, dev_stokesI, 1, dev_AbeamIb, 1, dev_ib + s));
     // - Stokes Q part for detector a
     CATCH_CUBLAS(cublasSdot(cublasH, nspix, dev_stokesQ, 1, dev_DQ1b, 1, dev_qb + s));
     // - Stokes U part for detector a
     CATCH_CUBLAS(cublasSdot(cublasH, nspix, dev_stokesU, 1, dev_DU1b, 1, dev_ub + s));
-}
+
+} 

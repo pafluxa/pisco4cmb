@@ -10,8 +10,8 @@ __global__ void cudaUtilities::__kernel__ewxty(int n, float* x, float* y, float*
     off = blockDim.x * gridDim.x;
 
     idx = tid;
-    while(idx < n) {
-
+    while(idx < n) 
+    {
         z[idx] = x[idx] * y[idx];
         idx += off;
     }
