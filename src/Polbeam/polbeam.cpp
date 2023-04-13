@@ -7,7 +7,7 @@
 
 #include <pointing.h>
 
-PolBeam::PolBeam(int _nside) : hpxBase(_nside, RING, SET_NSIDE)
+PolBeam::PolBeam(int _nside, double _rhoMax) : hpxBase(_nside, RING, SET_NSIDE)
 /** Constructor.
  * 
  * \param _nside: resolution parameter of beams (HealPix).
@@ -20,9 +20,7 @@ PolBeam::PolBeam(int _nside) : hpxBase(_nside, RING, SET_NSIDE)
     psbmode = 'p';
     buffersOK = false;
 
-    pointing p = hpxBase.pix2ang(nPixels);
-    rhoMax = p.theta;
-    
+    rhoMax = _rhoMax;
     beamBufferSize = sizeof(float) * nPixels;
     #ifdef POLBEAM_DEBUG
     std::cerr << "PolBeam::constructor" << std::endl;

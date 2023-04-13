@@ -6,16 +6,17 @@
 // healpix stuff
 #include <arr.h>
 #include <pointing.h>
-#include <healpix_base.h>
 // for OpenMP
 #include <omp.h>
 
 #include <cmath>
+#include <cstring>
 #include <iostream>
 #include <iomanip>
 
 // Constructor
-ConvolutionEngine::ConvolutionEngine(int _nsideSky, int _nsideBeam, int _nSamples) {
+ConvolutionEngine::ConvolutionEngine(int _nsideSky, int _nsideBeam, int _nSamples) 
+{
 
     int i;    
     
@@ -45,6 +46,49 @@ ConvolutionEngine::ConvolutionEngine(int _nsideSky, int _nsideBeam, int _nSample
     }
 }
 
+// constructor that can handle partial beam coverage
+// rho is the beam extension, in radians
+ConvolutionEngine::ConvolutionEngine(int _nsideSky, int _nsideBeam, int _nSamples, double rho) 
+: hpxSky(_nsideSky, RING, SET_NSIDE) {
+
+    int i;    
+    pointing equator;
+    rangeset<int> intraBeamPixels;
+
+    nSamples = _nSamples;
+    nsideSky = _nsideSky;
+    nsideBeam = _nsideBeam;
+    nspix = 12 * nsideSky * nsideSky;
+    nbpix = 12 * nsideBeam * nsideBeam;
+
+    // the number of non-zero entries in the matrix is set as a function
+    // of how large the beam is, i.e., larger beams require calculating
+    // stuff for more sky pixels than small beams.
+    // as a worst scase scenario, we consider all the pixels around the 
+    // equator with a headroom of 10%
+    equator.phi = 0.0;
+    equator.theta = M_PI_2;
+    intraBeamPixels = hpxSky.query_disc(equator, rho * 1.1);
+    nnz = 4 * intraBeamPixels.nval();
+    
+    // create cuSparse context
+    CATCH_CUSPARSE( cusparseCreate(&cuspH) )
+
+    // create cuBLAS context
+    CATCH_CUBLAS(cublasCreate(&cublasH))
+
+    // create streams for transfer
+    for(i = 0; i < N_TRANSFER_STREAMS; i++)
+    {
+        CATCH_CUDA(cudaStreamCreate(&transferStreams[i]))
+    }
+    // create streams for processing
+    for(i = 0; i < N_PROC_STREAMS; i++)
+    {
+        CATCH_CUDA(cudaStreamCreate(&procStreams[i]))
+        std::cerr << "stream " << i << " created!" << std::endl;
+    }
+}
 // dummy destructor
 ConvolutionEngine::~ConvolutionEngine(void)
 {
@@ -294,7 +338,7 @@ void ConvolutionEngine::update_matrix(int pix, float* weights, int* neigh) {
     csrColIndR[4 * pix + 2] = neigh[2];
     csrColIndR[4 * pix + 3] = neigh[3];
 
-    csrRowPtrR[pix] = 4 * pix;
+    //csrRowPtrR[pix] = 4 * pix;
 }
 
 void ConvolutionEngine::update_chi(int pix, float chi) {
@@ -305,11 +349,28 @@ void ConvolutionEngine::update_chi(int pix, float chi) {
 
 void ConvolutionEngine::fill_matrix(Sky* sky, PolBeam* beam, 
     float ra_bc, float dec_bc, float psi_bc) {
+    
+    pointing bc;
+    rangeset<int> intraBeamSkyPixels_rg;
+    std::vector<int> intraBeamSkyPixels;
 
-    #pragma omp parallel
-    {
+    bc.phi = double(ra_bc);
+    bc.theta = M_PI_2 - double(dec_bc);
+
+    intraBeamSkyPixels_rg = hpxSky.query_disc(bc, beam->get_rho_max());
+    // sky pixels inside the beam are sorted in ascending order, nice!
+    intraBeamSkyPixels = intraBeamSkyPixels_rg.toVector();
+    
+    // set matrix descriptors to zero
+    for(int i=0; i < nnz; i++) csrValR[i] = 0.0;
+    for(int i=0; i < nnz; i++) csrColIndR[i] = 0;
+    for(int i=0; i < nspix + 1; i++) csrRowPtrR[i] = 0;
+
+    //#pragma omp parallel
+    //{
     int i;
     int idx;
+    int idx2;
     int off;
     int skyPix;
     int chunksize;
@@ -317,27 +378,35 @@ void ConvolutionEngine::fill_matrix(Sky* sky, PolBeam* beam,
     double rho;
     double sigma;
     double chi;
-
     pointing bp;
     fix_arr<int, 4> neigh;
     fix_arr<double, 4> wgh;
     float weights[4];
     int neighbors[4];
     
-    idx = omp_get_thread_num();
-    off = omp_get_num_threads();
-    chunksize = nspix / off;
+    //idx = omp_get_thread_num();
+    //off = omp_get_num_threads();
+    //chunksize = intraBeamSkyPixels.size() / off;
     // last thread gets more work
-    reminder = 0;
-    if(idx == omp_get_thread_num() - 1) {
-        reminder += (nspix - chunksize * off);
-    }
+    //reminder = 0;
+    //if(idx == omp_get_thread_num() - 1) {
+    //    reminder += (intraBeamSkyPixels.size() - chunksize * off);
+    //    reminder += (nnz / 4 - intraBeamSkyPixels.size()); 
+    //}
 
     // Calculate equivalent beam coordinates for every sky pixel. 
     i = 0; 
-    while(i < chunksize + reminder)
-    {
-        skyPix = idx * chunksize + i;        
+    while(i < nnz / 4)
+    {   
+        idx2 = i;
+        if( i < intraBeamSkyPixels.size())
+        {
+            skyPix = intraBeamSkyPixels[i + idx * chunksize];        
+        }
+        else
+        {
+            skyPix = skyPix + 1;
+        }
         // get equivalent beam coordinates and polarization angle. 
         SphericalTransformations::rho_sigma_chi_pix(
             &rho, &sigma, &chi,
@@ -360,14 +429,39 @@ void ConvolutionEngine::fill_matrix(Sky* sky, PolBeam* beam,
         neighbors[2] = neigh[2];    
         neighbors[3] = neigh[3];
         
-        // update matrix values 
-        update_matrix(skyPix, weights, neighbors);
-        update_chi(skyPix, float(chi));
+        csrValR[4 * idx2 + 0] = weights[0];    
+        csrValR[4 * idx2 + 1] = weights[1];    
+        csrValR[4 * idx2 + 2] = weights[2];    
+        csrValR[4 * idx2 + 3] = weights[3];    
+
+        csrColIndR[4 * idx2 + 0] = neigh[0];
+        csrColIndR[4 * idx2 + 1] = neigh[1];
+        csrColIndR[4 * idx2 + 2] = neigh[2];
+        csrColIndR[4 * idx2 + 3] = neigh[3];
+
+        s2chi[skyPix] = sinf(2.0f * chi);
+        c2chi[skyPix] = cosf(2.0f * chi);
+        
+        csrRowPtrR[skyPix] = 4 * skyPix;
+
+        //std::cout << idx2 << " " << nnz / 4 << std::endl;
 
         i++;
     }
 
+    // post-process csrRowPtr to comply with CSR
+    // fill zero-values rows properly
+    int fill_value = 0;
+    for(int i = 0; i < nspix; i++)
+    {
+        csrRowPtrR[i] = fill_value;
+        if(csrRowPtrR[i + 1] > csrRowPtrR[i])
+        {
+            fill_value = csrRowPtrR[i+1];
+        }
     }
+    // fill last value of csrRowPtrR
+    csrRowPtrR[nspix] = 4 * nspix;
 }
 
 /* copies sine and consine chi and matrix to device.*/
@@ -375,8 +469,6 @@ void ConvolutionEngine::exec_transfer(void) {
 
     size_t bytes;
 
-    // fill last value of csrRowPtrR
-    csrRowPtrR[nspix] = 4 * nspix;
 
     // transfer cosine and sine of 2 chi
     bytes = sizeof(float) * nspix;

@@ -24,7 +24,7 @@ class PolBeam
     public:
         
         /* constructor */
-        PolBeam(int nside);
+        PolBeam(int nside, double rhomax=M_PI);
         /* constructor for the future */
         /*
         PolBeam

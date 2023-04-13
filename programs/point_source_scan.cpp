@@ -46,9 +46,9 @@ int main(void)
 
     Scanning scan;
     Sky sky(NSIDE_SKY);
-    PolBeam beam(NSIDE_BEAM);
+    PolBeam beam(NSIDE_BEAM, 0.1);
     Mapper mapper(NSIDE_MAP);
-    ConvolutionEngine conv(NSIDE_SKY, NSIDE_BEAM, NSAMP);
+    ConvolutionEngine conv(NSIDE_SKY, NSIDE_BEAM, NSAMP, 0.1);
 
     // make beams of detector a and b to be gaussian, no cross-pol
     beam.allocate_buffers();

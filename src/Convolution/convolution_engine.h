@@ -4,6 +4,8 @@
 #include <cublas_v2.h>
 #include <cusparse.h>
 
+#include <healpix_base.h>
+
 #include "Sky/sky.hpp"
 #include "Polbeam/polbeam.hpp"
 
@@ -49,6 +51,7 @@ class ConvolutionEngine
     public:
     
         ConvolutionEngine(int nsideSky, int nsideBeam, int nSamples);
+        ConvolutionEngine(int nsideSky, int nsideBeam, int nSamples, double rho);
        ~ConvolutionEngine();
         /* Allocate host memory. */
         void allocate_host_buffers(void);
@@ -99,6 +102,8 @@ class ConvolutionEngine
         int nnz;
         /* flag to check if this is the first run*/
         bool firstRun = true;
+        /* HealPix base object representing the sky.*/
+        Healpix_Base hpxSky;
         /* status, for reporting */
         cusparseStatus_t status;
         /* cuSparse handler*/
