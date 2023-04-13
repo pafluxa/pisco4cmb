@@ -10,16 +10,18 @@
 // for OpenMP
 #include <omp.h>
 
+#include <cmath>
 #include <iostream>
 #include <iomanip>
 
 // Constructor
-ConvolutionEngine::ConvolutionEngine(int nsideSky, int nsideBeam, int nSamples) {
+ConvolutionEngine::ConvolutionEngine(int _nsideSky, int _nsideBeam, int _nSamples) {
 
     int i;    
-    this->nSamples = nSamples;
-    this->nsideSky = nsideSky;
-    this->nsideBeam = nsideBeam;
+    
+    nSamples = _nSamples;
+    nsideSky = _nsideSky;
+    nsideBeam = _nsideBeam;
     nspix = 12 * nsideSky * nsideSky;
     nbpix = 12 * nsideBeam * nsideBeam;
     nnz = 4 * nspix;
@@ -39,6 +41,7 @@ ConvolutionEngine::ConvolutionEngine(int nsideSky, int nsideBeam, int nSamples) 
     for(i = 0; i < N_PROC_STREAMS; i++)
     {
         CATCH_CUDA(cudaStreamCreate(&procStreams[i]))
+        std::cerr << "stream " << i << " created!" << std::endl;
     }
 }
 
@@ -89,8 +92,8 @@ void ConvolutionEngine::allocate_host_buffers(void) {
     CATCH_CUDA(cudaMallocHost((void**)&s2chi, bytes))
     CATCH_CUDA(cudaMallocHost((void**)&c2chi, bytes))
     // sky pixel coordinates
-    raPixSky = (float *)malloc(sizeof(float) * nspix);
-    decPixSky = (float *)malloc(sizeof(float) * nspix);
+    raPixSky = (double *)malloc(sizeof(double) * nspix);
+    decPixSky = (double *)malloc(sizeof(double) * nspix);
 }
 
 void ConvolutionEngine::allocate_device_buffers(void) {
@@ -173,8 +176,8 @@ void ConvolutionEngine::allocate_device_buffers(void) {
 }
 
 // creates internal cuSparse CSR matrix. 
-void ConvolutionEngine::create_matrix(void) {
-    
+void ConvolutionEngine::create_matrix(void) 
+{      
     CATCH_CUSPARSE(
         cusparseCreateCsr(
             &R, nspix, nbpix, nnz,
@@ -273,8 +276,8 @@ void ConvolutionEngine::calculate_sky_pixel_coordinates(Sky* sky) {
     {
         sp = sky->hpxBase.pix2ang(skyPix);
         
-        raPixSky[skyPix] = float(sp.phi);
-        decPixSky[skyPix] = float(M_PI_2 - sp.theta);
+        raPixSky[skyPix] = sp.phi;
+        decPixSky[skyPix] = M_PI_2 - sp.theta;
     }
 }
 
@@ -311,11 +314,10 @@ void ConvolutionEngine::fill_matrix(Sky* sky, PolBeam* beam,
     int skyPix;
     int chunksize;
     int reminder;
-    double ra_pix;
-    double dec_pix;
     double rho;
     double sigma;
     double chi;
+
     pointing bp;
     fix_arr<int, 4> neigh;
     fix_arr<double, 4> wgh;
@@ -336,20 +338,17 @@ void ConvolutionEngine::fill_matrix(Sky* sky, PolBeam* beam,
     while(i < chunksize + reminder)
     {
         skyPix = idx * chunksize + i;        
-        // coordinates of sky pixel already computed. 
-        ra_pix = double(raPixSky[skyPix]);
-        dec_pix = double(decPixSky[skyPix]);
-
         // get equivalent beam coordinates and polarization angle. 
         SphericalTransformations::rho_sigma_chi_pix(
             &rho, &sigma, &chi,
             double(ra_bc), double(dec_bc), double(psi_bc),
-            ra_pix, dec_pix);
+            raPixSky[skyPix], decPixSky[skyPix]);
 
-        // get interpolation information for beam at (rho, sigma). 
+        // assign to healpix pointig type
         bp.theta = rho;
         bp.phi = sigma;
 
+        // get interpolation information for beam at (rho, sigma). 
         beam->hpxBase.get_interpol(bp, neigh, wgh);
 
         weights[0] = float(wgh[0]);    
@@ -360,11 +359,7 @@ void ConvolutionEngine::fill_matrix(Sky* sky, PolBeam* beam,
         neighbors[1] = neigh[1];    
         neighbors[2] = neigh[2];    
         neighbors[3] = neigh[3];
-        //if(rho < 1e-5){
-        //    fprintf(stderr, "%4.8lf  %4.8lf %4.8lf\n", rho, sigma, chi);
-        //    fprintf(stderr, "%d  %d  %d  %d\n", neigh[0], neigh[1], neigh[2], neigh[3]); 
-        //    fprintf(stderr, "%4.8lf  %4.8lf  %4.8lf  %4.8lf\n", wgh[0], wgh[1], wgh[2], wgh[3]); 
-        //}
+        
         // update matrix values 
         update_matrix(skyPix, weights, neighbors);
         update_chi(skyPix, float(chi));
@@ -385,14 +380,14 @@ void ConvolutionEngine::exec_transfer(void) {
 
     // transfer cosine and sine of 2 chi
     bytes = sizeof(float) * nspix;
-    CATCH_CUDA(cudaMemcpy(dev_s2chi, s2chi, bytes, cudaMemcpyHostToDevice))
-    CATCH_CUDA(cudaMemcpy(dev_c2chi, c2chi, bytes, cudaMemcpyHostToDevice))
+    CATCH_CUDA(cudaMemcpyAsync(dev_s2chi, s2chi, bytes, cudaMemcpyHostToDevice, transferStreams[0]))
+    CATCH_CUDA(cudaMemcpyAsync(dev_c2chi, c2chi, bytes, cudaMemcpyHostToDevice, transferStreams[1]))
     
     // transfer matrix descriptors (CSR format)
     bytes = sizeof(float) * nnz;
-    CATCH_CUDA(cudaMemcpy(dev_csrValR, csrValR, bytes, cudaMemcpyHostToDevice))
+    CATCH_CUDA(cudaMemcpyAsync(dev_csrValR, csrValR, bytes, cudaMemcpyHostToDevice, transferStreams[0]))
     bytes = sizeof(int) * nnz;
-    CATCH_CUDA(cudaMemcpy(dev_csrColIndR, csrColIndR, bytes, cudaMemcpyHostToDevice))
+    CATCH_CUDA(cudaMemcpyAsync(dev_csrColIndR, csrColIndR, bytes, cudaMemcpyHostToDevice, transferStreams[1]))
     bytes = sizeof(int) * (nspix + 1);
     CATCH_CUDA(cudaMemcpy(dev_csrRowPtrR, csrRowPtrR, bytes, cudaMemcpyHostToDevice))
 }
@@ -406,14 +401,6 @@ void ConvolutionEngine::exec_single_convolution_step(int s) {
     size_t bufferSize5;
     size_t bufferSize6;
 
-
-    CATCH_CUDA(cudaDeviceSynchronize())
-    CATCH_CUDA(cudaGetLastError())
-
-    // set cublas and cusparse to use the same stream
-    CATCH_CUSPARSE( cusparseSetStream(cuspH, procStreams[0]) )
-    CATCH_CUBLAS( cublasSetStream(cublasH, procStreams[0]) )
-
     // set cuSparse to run in device mode so all memory operations
     // happen in the GPU (fully async)
     CATCH_CUSPARSE(cusparseSetPointerMode(cuspH, CUSPARSE_POINTER_MODE_DEVICE))
@@ -422,148 +409,60 @@ void ConvolutionEngine::exec_single_convolution_step(int s) {
     // in the GPU
     CATCH_CUBLAS( cublasSetPointerMode(cublasH, CUBLAS_POINTER_MODE_DEVICE) )
 
-    // calculate required extra space and allocate if needed 
+    // calculate required extra space and allocate if needed
+    if(firstRun)
+    {
     CATCH_CUSPARSE(
         cusparseSpMV_bufferSize(
             cuspH, CUSPARSE_OPERATION_NON_TRANSPOSE,
             &dev_alpha, R, beamIa, dev_beta, AbeamIa, CUDA_R_32F,
             CUSPARSE_SPMV_CSR_ALG2, &bufferSize1)
     )
-    if(firstRun){
-        dev_tempBufferSize1 = bufferSize1;
-        CATCH_CUDA( cudaMalloc(&dev_tempBuffer1, dev_tempBufferSize1) )       
-    }
-    if((bufferSize1 != dev_tempBufferSize1) && !(firstRun))
-    {
-        if(dev_tempBufferSize1 > 0)
-        {
-            CATCH_CUDA( cudaFree(dev_tempBuffer1) )
-        }
-        dev_tempBufferSize1 = bufferSize1;
-        CATCH_CUDA( cudaMalloc(&dev_tempBuffer1, dev_tempBufferSize1) )
-        useGraph = false;
-    }
-
-    // calculate required extra space and allocate if needed 
     CATCH_CUSPARSE(
         cusparseSpMV_bufferSize(
             cuspH, CUSPARSE_OPERATION_NON_TRANSPOSE,
             dev_alpha, R, beamQa, dev_beta, AbeamQa, CUDA_R_32F,
             CUSPARSE_SPMV_CSR_ALG2, &bufferSize2)
     )
-    if(firstRun){
-        dev_tempBufferSize2 = bufferSize2;
-        CATCH_CUDA( cudaMalloc(&dev_tempBuffer2, dev_tempBufferSize2) )       
-    }
-    if((bufferSize2 != dev_tempBufferSize2) && !(firstRun))
-    {
-        if(dev_tempBufferSize2 > 0)
-        {
-            CATCH_CUDA( cudaFree(dev_tempBuffer2) )
-        }
-        dev_tempBufferSize2 = bufferSize2;
-        CATCH_CUDA( cudaMalloc(&dev_tempBuffer2, dev_tempBufferSize3) )
-        useGraph = false;
-    }
-
-    // calculate required extra space and allocate if needed 
     CATCH_CUSPARSE(
         cusparseSpMV_bufferSize(
             cuspH, CUSPARSE_OPERATION_NON_TRANSPOSE,
             dev_alpha, R, beamUa, dev_beta, AbeamUa, CUDA_R_32F,
             CUSPARSE_SPMV_CSR_ALG2, &bufferSize3)
     )
-    if(firstRun){
-        dev_tempBufferSize3 = bufferSize3;
-        CATCH_CUDA( cudaMalloc(&dev_tempBuffer3, dev_tempBufferSize3) )       
-    }
-    if((bufferSize3 != dev_tempBufferSize3) && !(firstRun))
-    {
-        if(dev_tempBufferSize3 > 0)
-        {
-            CATCH_CUDA( cudaFree(dev_tempBuffer3) )
-        }
-        dev_tempBufferSize3 = bufferSize3;
-        CATCH_CUDA( cudaMalloc(&dev_tempBuffer3, dev_tempBufferSize3) )
-        useGraph = false;
-    }    
-
-        // calculate required extra space and allocate if needed 
     CATCH_CUSPARSE(
         cusparseSpMV_bufferSize(
             cuspH, CUSPARSE_OPERATION_NON_TRANSPOSE,
             dev_alpha, R, beamIb, dev_beta, AbeamIb, CUDA_R_32F,
             CUSPARSE_SPMV_CSR_ALG2, &bufferSize4)
     )
-    if(firstRun){
-        dev_tempBufferSize4 = bufferSize4;
-        CATCH_CUDA( cudaMalloc(&dev_tempBuffer4, dev_tempBufferSize4) )       
-    }
-    if((bufferSize4 != dev_tempBufferSize4) && !(firstRun))
-    {
-        if(dev_tempBufferSize4 > 0)
-        {
-            CATCH_CUDA( cudaFree(dev_tempBuffer4) )
-        }
-        dev_tempBufferSize4 = bufferSize4;
-        CATCH_CUDA( cudaMalloc(&dev_tempBuffer4, dev_tempBufferSize4) )
-        useGraph = false;
-    }    
-        // calculate required extra space and allocate if needed 
     CATCH_CUSPARSE(
         cusparseSpMV_bufferSize(
             cuspH, CUSPARSE_OPERATION_NON_TRANSPOSE,
-            dev_alpha, R, beamQa, dev_beta, AbeamQb, CUDA_R_32F,
+            dev_alpha, R, beamQa, dev_beta, AbeamUb, CUDA_R_32F,
             CUSPARSE_SPMV_CSR_ALG2, &bufferSize5)
     )
-    if(firstRun){
-        dev_tempBufferSize5 = bufferSize5;
-        CATCH_CUDA( cudaMalloc(&dev_tempBuffer5, dev_tempBufferSize5) )       
-    }
-    if((bufferSize5 != dev_tempBufferSize5) && !(firstRun))
-    {
-        if(dev_tempBufferSize5 > 0)
-        {
-            CATCH_CUDA( cudaFree(dev_tempBuffer5) )
-        }
-        dev_tempBufferSize5 = bufferSize5;
-        CATCH_CUDA( cudaMalloc(&dev_tempBuffer5, dev_tempBufferSize5) )
-        useGraph = false;
-    }        
-    // calculate required extra space and allocate if needed 
     CATCH_CUSPARSE(
         cusparseSpMV_bufferSize(
             cuspH, CUSPARSE_OPERATION_NON_TRANSPOSE,
             dev_alpha, R, beamQa, dev_beta, AbeamUb, CUDA_R_32F,
             CUSPARSE_SPMV_CSR_ALG2, &bufferSize6)
     )
-    if(firstRun){
-        dev_tempBufferSize6 = bufferSize6;
-        CATCH_CUDA( cudaMalloc(&dev_tempBuffer6, dev_tempBufferSize6) )       
-    }
-    if((bufferSize6 != dev_tempBufferSize6) && !(firstRun))
-    {
-        if(dev_tempBufferSize6 > 0)
-        {
-            CATCH_CUDA( cudaFree(dev_tempBuffer6) )
-        }
-        dev_tempBufferSize6 = bufferSize6;
-        CATCH_CUDA( cudaMalloc(&dev_tempBuffer6, dev_tempBufferSize6) )
-        useGraph = false;
-    }  
 
-    if(firstRun)
-    {
-        firstRun = false;
+        CATCH_CUDA( cudaMalloc(&dev_tempBuffer1, bufferSize1) )
+        CATCH_CUDA( cudaMalloc(&dev_tempBuffer2, bufferSize2) )
+        CATCH_CUDA( cudaMalloc(&dev_tempBuffer3, bufferSize3) )
+        CATCH_CUDA( cudaMalloc(&dev_tempBuffer4, bufferSize4) )
+        CATCH_CUDA( cudaMalloc(&dev_tempBuffer5, bufferSize5) )
+        CATCH_CUDA( cudaMalloc(&dev_tempBuffer6, bufferSize6) )
     }
     
-    // capture graph execution
-    if(useGraph)
+    CATCH_CUDA(cudaDeviceSynchronize())
+    CATCH_CUDA(cudaGetLastError())
+    
+    if(firstRun)
     {
-        CATCH_CUDA( cudaGraphLaunch(graph_exec, procStreams[0]) )
-    }
-    else
-    {
+        // set cublas and cusparse to use the same stream
         CATCH_CUSPARSE( cusparseSetStream(cuspH, procStreams[0]) )
         CATCH_CUDA( cudaStreamBeginCapture(procStreams[0], cudaStreamCaptureModeGlobal) )
 
@@ -595,6 +494,7 @@ void ConvolutionEngine::exec_single_convolution_step(int s) {
                 CUSPARSE_SPMV_CSR_ALG2, 
                 dev_tempBuffer3)
         )
+        
         // Repeat for detector b 
         // calculate R x beam for:
         // - Stokes I beam of detector b
@@ -628,29 +528,42 @@ void ConvolutionEngine::exec_single_convolution_step(int s) {
         CATCH_CUDA(cudaDeviceSynchronize())
         CATCH_CUDA(cudaGetLastError())
         CATCH_CUDA(cudaGraphInstantiateWithFlags(&graph_exec, graph, 0))
+        firstRun = false;
         useGraph = true;
     }
+    // capture graph execution
+    else
+    {
+        CATCH_CUDA( cudaGraphLaunch(graph_exec, procStreams[0]) )
+    }
+
+    CATCH_CUDA(cudaStreamSynchronize(procStreams[0]))
 
     // calculate D_Q for detector a
     // note: the order in which operations below are executed should not be changed
     //       as it was designed to maximize concurrency with cuSparse
     // - multiply cos(2chi) by Q beam
-    cudaUtilities::ewxty(nspix, dev_AbeamQa, dev_c2chi, procStreams[0], dev_DQ1a); 
+    cudaUtilities::ewxty(nspix, dev_AbeamQa, dev_c2chi, procStreams[1], dev_DQ1a); 
     // - multiply sin(2chi) by Q beam
-    cudaUtilities::ewxty(nspix, dev_AbeamQa, dev_s2chi, procStreams[0], dev_DU2a);
+    cudaUtilities::ewxty(nspix, dev_AbeamQa, dev_s2chi, procStreams[1], dev_DU2a);
     // - multiply sin(2chi) by U beam
-    cudaUtilities::ewxty(nspix, dev_AbeamUa, dev_s2chi, procStreams[0], dev_DQ2a);
+    cudaUtilities::ewxty(nspix, dev_AbeamUa, dev_s2chi, procStreams[2], dev_DQ2a);
     // - multiply cos(2chi) by U beam
-    cudaUtilities::ewxty(nspix, dev_AbeamUa, dev_c2chi, procStreams[0], dev_DU1a);
+    cudaUtilities::ewxty(nspix, dev_AbeamUa, dev_c2chi, procStreams[2], dev_DU1a);
     // - multiply cos(2chi) by Q beam
-    cudaUtilities::ewxty(nspix, dev_AbeamQb, dev_c2chi, procStreams[0], dev_DQ1b);
+    cudaUtilities::ewxty(nspix, dev_AbeamQb, dev_c2chi, procStreams[3], dev_DQ1b);
     // - multiply sin(2chi) by Q beam
-    cudaUtilities::ewxty(nspix, dev_AbeamQb, dev_s2chi, procStreams[0], dev_DU2b);
+    cudaUtilities::ewxty(nspix, dev_AbeamQb, dev_s2chi, procStreams[3], dev_DU2b);
     // - multiply sin(2chi) by U beam
-    cudaUtilities::ewxty(nspix, dev_AbeamUb, dev_s2chi, procStreams[0], dev_DQ2b);
+    cudaUtilities::ewxty(nspix, dev_AbeamUb, dev_s2chi, procStreams[4], dev_DQ2b);
     // - multiply cos(2chi) by U beam
-    cudaUtilities::ewxty(nspix, dev_AbeamUb, dev_c2chi, procStreams[0], dev_DU1b);
+    cudaUtilities::ewxty(nspix, dev_AbeamUb, dev_c2chi, procStreams[4], dev_DU1b);
 
+    for(int i = 1; i < N_PROC_STREAMS; i++) {
+        CATCH_CUDA(cudaStreamSynchronize(procStreams[i]))
+    }
+
+    CATCH_CUBLAS( cublasSetStream(cublasH, procStreams[0]) )
     // calculate D for detector a 
     // - add and overwrite DQ1
     CATCH_CUBLAS(cublasSaxpy(cublasH, nspix, dev_subme, dev_DQ2a, 1, dev_DQ1a, 1))
@@ -672,16 +585,16 @@ void ConvolutionEngine::exec_single_convolution_step(int s) {
 
     // convolution is now a dot product
     // - Stokes I part for detector a 
-    CATCH_CUBLAS(cublasSdot(cublasH, nspix, dev_stokesI, 1, dev_AbeamIa, 1, dev_ia + s));
+    CATCH_CUBLAS(cublasSdot(cublasH, nspix, dev_stokesI, 1, dev_AbeamIa, 1, dev_ia + s))
     // - Stokes Q part for detector a
-    CATCH_CUBLAS(cublasSdot(cublasH, nspix, dev_stokesQ, 1, dev_DQ1a, 1, dev_qa + s));
+    CATCH_CUBLAS(cublasSdot(cublasH, nspix, dev_stokesQ, 1, dev_DQ1a, 1, dev_qa + s))
     // - Stokes U part for detector a
-    CATCH_CUBLAS(cublasSdot(cublasH, nspix, dev_stokesU, 1, dev_DU1a, 1, dev_ua + s));
+    CATCH_CUBLAS(cublasSdot(cublasH, nspix, dev_stokesU, 1, dev_DU1a, 1, dev_ua + s))
 
     // - Stokes I part for detector b 
-    CATCH_CUBLAS(cublasSdot(cublasH, nspix, dev_stokesI, 1, dev_AbeamIb, 1, dev_ib + s));
+    CATCH_CUBLAS(cublasSdot(cublasH, nspix, dev_stokesI, 1, dev_AbeamIb, 1, dev_ib + s))
     // - Stokes Q part for detector a
-    CATCH_CUBLAS(cublasSdot(cublasH, nspix, dev_stokesQ, 1, dev_DQ1b, 1, dev_qb + s));
+    CATCH_CUBLAS(cublasSdot(cublasH, nspix, dev_stokesQ, 1, dev_DQ1b, 1, dev_qb + s))
     // - Stokes U part for detector a
-    CATCH_CUBLAS(cublasSdot(cublasH, nspix, dev_stokesU, 1, dev_DU1b, 1, dev_ub + s));
+    CATCH_CUBLAS(cublasSdot(cublasH, nspix, dev_stokesU, 1, dev_DU1b, 1, dev_ub + s))
 } 

@@ -7,8 +7,9 @@
 #include "Sky/sky.hpp"
 #include "Polbeam/polbeam.hpp"
 
-#define N_TRANSFER_STREAMS 1
-#define N_PROC_STREAMS 1
+#define N_TRANSFER_STREAMS 2
+#define N_PROC_STREAMS 5
+
 // catch CUDA errors
 #define CATCH_CUDA(stat) { catch_cuda((stat), __FILE__, __LINE__); }
 inline void catch_cuda(cudaError_t status, const char *file, int line, bool abort=true) {    
@@ -110,17 +111,11 @@ class ConvolutionEngine
 
         // temporal buffer for cusparse/
         void* dev_tempBuffer1 = NULL;
-        size_t dev_tempBufferSize1 = 0;
         void* dev_tempBuffer2 = NULL;
-        size_t dev_tempBufferSize2 = 0;
         void* dev_tempBuffer3 = NULL;
-        size_t dev_tempBufferSize3 = 0;
         void* dev_tempBuffer4 = NULL;
-        size_t dev_tempBufferSize4 = 0;
         void* dev_tempBuffer5 = NULL;
-        size_t dev_tempBufferSize5 = 0;
         void* dev_tempBuffer6 = NULL;
-        size_t dev_tempBufferSize6 = 0;
         /* buffers to store detector data*/
         float* dev_ia;
         float* dev_qa;
@@ -192,8 +187,8 @@ class ConvolutionEngine
         float* dev_DU1b;
         float* dev_DU2b;
         /* coordinates of sky pixels (right ascention and declination)*/
-        float* raPixSky;
-        float* decPixSky;
+        double* raPixSky;
+        double* decPixSky;
         /* Sine and cosine of twice chi (host). */
         float* s2chi;
         float* c2chi;

@@ -111,15 +111,26 @@ int main(int argc, char* argv[])
     // execute convolution
     // first step is outside the loop to allow better concurrency
     s = 0;
+    auto t1s = std::chrono::steady_clock::now();
+    auto t1e = std::chrono::steady_clock::now();
     std::cerr << "convolution running... " << std::endl;
+    bool resetTimer = true;
     while(s < scan.size())
     {
-        if(s % 1000 == 0) {
+        if(resetTimer)
+        {
+            t1s = std::chrono::steady_clock::now();
+            resetTimer = false;
+        }
+        if(s % 1000 == 0 && s > 0) {
+            t1e = std::chrono::steady_clock::now();
+            double walltime = std::chrono::duration_cast<std::chrono::microseconds>(t1e - t1s).count();
+            double rate = 1000.0 / (walltime / 1E6);
+            double remaining_time = (scan.size() - s) / rate; 
             std::cerr << s + 1 << " / " << scan.size() << " ";
-            std::cerr << scan.get_ra_ptr()[s] * RAD2DEG << " ";
-            std::cerr << scan.get_dec_ptr()[s] * RAD2DEG << " ";
-            std::cerr << scan.get_pa_ptr()[s] * RAD2DEG << std::endl;
-
+            std::cerr << "computing at " << rate << " samples per second. ";
+            std::cerr << "Estimated remaining time: " << remaining_time << " seconds (" << remaining_time / 60.0 << " minutes)." << std::endl;
+            resetTimer = true;
         }
 
         conv.fill_matrix(&sky, &beam, 

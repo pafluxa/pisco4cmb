@@ -1,5 +1,6 @@
 #from matplotlib import rc_file
 #rc_file('./matplotlibrc')  # <-- the file containing your settings
+import os
 import sys
 import pandas
 import numpy
@@ -75,6 +76,8 @@ lmax = 250
 
 data = pandas.read_csv(sys.argv[1])
 cldata = pandas.read_csv(sys.argv[2])
+workdir = sys.argv[3]
+
 clT = cldata['cl_TT'] 
 clE = cldata['cl_EE'] 
 clB = cldata['cl_BB'] 
@@ -129,23 +132,23 @@ axEE.ticklabel_format(axis='y', style='sci')
 
 axBB.set_title( r'$ D_{\ell}^{BB}$' )
 axBB.set_xlim( (2, lmax) )
-axBB.set_ylim( (0, 2*1e-2) )
+axBB.set_ylim( (0, 2*1e-3) )
 #axBB.set_yscale('symlog', linthreshy=1e-3)
 axBB.ticklabel_format(axis='y', style='sci')
 axBB.yaxis.major.formatter.set_powerlimits((0,1))
 
 axTT.plot( ell2 * clT, alpha=0.8, label='ref', linestyle='dashed', color='black')
-axTT.plot( ell2 * (TTo), alpha=0.7, label= 'in', linestyle='dotted', color='green')
+axTT.plot( ell2 * (TTo / wl_TT**2), alpha=0.7, label= 'in', linestyle='dotted', color='green')
 axTT.plot( ell2 * (TT / (wl_TT**2)), alpha=0.5, label='out', linestyle= 'solid', color= 'red' )
 axTT.legend()
 
 axEE.plot( ell2*clE, alpha=0.8, label='ref', linestyle='dashed', color='black')
-axEE.plot( ell2*(EEo) ,     alpha=0.7, label= 'in', linestyle='dotted', color='green')
+axEE.plot( ell2*(EEo / wl_EE**2) ,     alpha=0.7, label= 'in', linestyle='dotted', color='green')
 axEE.plot( ell2*(EE / (wl_EE**2)), alpha=0.5, label='out', linestyle= 'solid', color= 'red' )
 axEE.legend()
 
 axBB.plot( ell2 * clB, alpha=0.8, label='ref', linestyle='dashed', color='black')
-axBB.plot( ell2 * (BBo),     alpha=0.7, label= 'in', linestyle='dotted', color='green')
+axBB.plot( ell2 * (BBo / wl_BB**2),     alpha=0.7, label= 'in', linestyle='dotted', color='green')
 axBB.plot( ell2 * (BB / (wl_BB**2)), alpha=0.5, label='out', linestyle= 'solid', color= 'red' )
 axBB.legend()
 
@@ -173,7 +176,9 @@ ax.yaxis.major.formatter._useMathText = True
 ax.yaxis.set_minor_locator(  AutoMinorLocator(5) )
 ax.xaxis.set_minor_locator(  AutoMinorLocator(5) )
 
-#fig.tight_layout()
-plt.savefig("ps.png")
-#plt.show()
+fig.tight_layout()
+
+plt.savefig(os.path.join(workdir, "ps.png"))
+plt.show()
+
     

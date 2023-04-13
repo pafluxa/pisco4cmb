@@ -1,5 +1,6 @@
 #include <math.h>
 #include "sphtrigo.hpp"
+#include <iostream>
 
 // definitions for floating point arithmetic
 #define M_PIF 3.141592653589793238462643383279502884e+00F
@@ -42,6 +43,7 @@ void SphericalTransformations::sp_rho_sigma_chi_pix(
 
   float crho  = sdc * sdp + cdc * cdp * cd;
   if(crho >= 1.0f)*rho = 0.0f;
+  else if(crho <= -1.0f)*rho=M_PIF;
   else *rho = acosf(crho);
   if(*rho > 1.0e-6f) {
     beta  = atan2f(sd * cdc, sdc * cdp - cdc * sdp * cd);
@@ -94,21 +96,22 @@ void SphericalTransformations::rho_sigma_chi_pix(
   double cd = cos(dra);
 
   double crho  = sdc * sdp + cdc * cdp * cd;
-  if(crho > 1.0)
+  if(crho >= 1.0)
   {
     *rho = 0.0;
   }
-  else if(abs(crho - 1.0) < 1E-7)
+  else if(crho <= -1.0)
   {
-    *rho = 0.0;
+    *rho = M_PI;
   }
   else
   {
     *rho = acos(crho);
   }
-  // ???
+  // original statement to catch corner case
   //if(crho >= 1.0)*rho = 0.0;
   //else *rho = acos(crho);
+ 
   if(*rho > 1.0e-6) {
     beta  = atan2(sd * cdc, sdc * cdp - cdc * sdp * cd);
     alpha = atan2(sd * cdp, sdp * cdc - cdp * sdc * cd);
