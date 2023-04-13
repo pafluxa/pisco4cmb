@@ -1,7 +1,7 @@
 # build folder
 build/
 # working directory
-workdir/
+#workdir/
 # executables
 *.x
 # object files

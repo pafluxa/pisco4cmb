@@ -22,7 +22,7 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 # directives to find required packages
 # CUDA is required
 find_package(CUDA REQUIRED)
-set(CMAKE_CUDA_ARCHITECTURES 52)
+set(CMAKE_CUDA_ARCHITECTURES NATIVE)
 # OpenMP is required
 find_package(OpenMP REQUIRED)
 # HealPIX is required (cfitsio too)

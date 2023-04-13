@@ -72,7 +72,9 @@ class ConvolutionEngine
         /* execute a "sky beam multiplication" */
         void exec_single_convolution_step(int s);
         /* detector data back to host*/
-        void data_to_host(float* a, float *b);
+        void iqu_to_tod(float* a, float *b);
+        /* synchronize device */
+        void sync(void);
         
     private:
         /** Parameters. **/
@@ -96,8 +98,6 @@ class ConvolutionEngine
         int nnz;
         /* flag to check if this is the first run*/
         bool firstRun = true;
-        /* CuSparse specific stuff.*/
-        size_t cusparse_buffersize = 0;
         /* status, for reporting */
         cusparseStatus_t status;
         /* cuSparse handler*/
@@ -108,9 +108,19 @@ class ConvolutionEngine
         cudaStream_t transferStreams[N_TRANSFER_STREAMS];
         cudaStream_t procStreams[N_PROC_STREAMS];
 
-        /* classic NVIDIA, void* for a buffer*/
-        void* dev_tempBuffer = NULL;
-        size_t dev_tempBufferSize = 0;
+        // temporal buffer for cusparse/
+        void* dev_tempBuffer1 = NULL;
+        size_t dev_tempBufferSize1 = 0;
+        void* dev_tempBuffer2 = NULL;
+        size_t dev_tempBufferSize2 = 0;
+        void* dev_tempBuffer3 = NULL;
+        size_t dev_tempBufferSize3 = 0;
+        void* dev_tempBuffer4 = NULL;
+        size_t dev_tempBufferSize4 = 0;
+        void* dev_tempBuffer5 = NULL;
+        size_t dev_tempBufferSize5 = 0;
+        void* dev_tempBuffer6 = NULL;
+        size_t dev_tempBufferSize6 = 0;
         /* buffers to store detector data*/
         float* dev_ia;
         float* dev_qa;

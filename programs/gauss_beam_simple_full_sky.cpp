@@ -110,9 +110,8 @@ int main(int argc, char* argv[])
 
     // execute convolution
     // first step is outside the loop to allow better concurrency
-    s = 49000;
-    conv.fill_matrix(&sky, &beam, 
-        scan.get_ra_ptr()[s], scan.get_dec_ptr()[s], scan.get_pa_ptr()[s]);
+    s = 0;
+    std::cerr << "convolution running... " << std::endl;
     while(s < scan.size())
     {
         if(s % 1000 == 0) {
@@ -123,21 +122,19 @@ int main(int argc, char* argv[])
 
         }
 
+        conv.fill_matrix(&sky, &beam, 
+            scan.get_ra_ptr()[s], scan.get_dec_ptr()[s], scan.get_pa_ptr()[s]);
+
         conv.exec_transfer();
 
         conv.exec_single_convolution_step(s);
 
         s = s + 1;
-        if(s >= scan.size())
-        {
-            break;
-        }
-
-        conv.fill_matrix(&sky, &beam, 
-            scan.get_ra_ptr()[s], scan.get_dec_ptr()[s], scan.get_pa_ptr()[s]);
     }
-
-    conv.data_to_host(data_a, data_b);
+    std::cerr << "convolution complete. " << std::endl;
+    conv.sync();
+    
+    conv.iqu_to_tod(data_a, data_b);
 
     // transform results to a map
     mapper.accumulate_data(scan.size(), 

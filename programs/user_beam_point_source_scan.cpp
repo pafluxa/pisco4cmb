@@ -149,7 +149,7 @@ int main(int argc, char* argv[])
     std::cerr << "[INFO] Computed " << nra * ndec * npa << " samples in " << time_wall / 1000.0 << " ms ";
     std::cerr << "(" << (nra * ndec * npa) / (time_wall / 1000000.0) << " samples/sec)" << std::endl;
 
-    conv.data_to_host(data_a, data_b);
+    conv.iqu_to_tod(data_a, data_b);
 
     // transform results to a map
     // detector b has a polarization angle of 90 degrees.
