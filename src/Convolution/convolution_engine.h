@@ -100,6 +100,8 @@ class ConvolutionEngine
         int nbpix;
         /* number of non-zero elements in matrix*/
         int nnz;
+        /* number of non-zero pixels*/
+        int nzpixels;
         /* flag to check if this is the first run*/
         bool firstRun = true;
         /* HealPix base object representing the sky.*/

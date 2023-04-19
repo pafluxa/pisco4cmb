@@ -13,6 +13,32 @@
 #include <cstring>
 #include <iostream>
 #include <iomanip>
+#include <numeric>
+#include <algorithm>
+
+#include <iostream>
+#include <vector>
+#include <numeric>      // std::iota
+#include <algorithm>    // std::sort, std::stable_sort
+
+
+template <typename T>
+std::vector<size_t> sort_indexes(const std::vector<T> &v) {
+
+  // initialize original index locations
+  std::vector<size_t> idx(v.size());
+  std::iota(idx.begin(), idx.end(), 0);
+
+  // sort indexes based on comparing values in v
+  // using std::stable_sort instead of std::sort
+  // to avoid unnecessary index re-orderings
+  // when v contains elements of equal values 
+  std::stable_sort(idx.begin(), idx.end(),
+       [&v](size_t i1, size_t i2) {return v[i1] < v[i2];});
+
+  return idx;
+}
+
 
 // Constructor
 ConvolutionEngine::ConvolutionEngine(int _nsideSky, int _nsideBeam, int _nSamples) 
@@ -42,7 +68,6 @@ ConvolutionEngine::ConvolutionEngine(int _nsideSky, int _nsideBeam, int _nSample
     for(i = 0; i < N_PROC_STREAMS; i++)
     {
         CATCH_CUDA(cudaStreamCreate(&procStreams[i]))
-        std::cerr << "stream " << i << " created!" << std::endl;
     }
 }
 
@@ -68,9 +93,11 @@ ConvolutionEngine::ConvolutionEngine(int _nsideSky, int _nsideBeam, int _nSample
     // equator with a headroom of 10%
     equator.phi = 0.0;
     equator.theta = M_PI_2;
-    intraBeamPixels = hpxSky.query_disc(equator, rho * 1.1);
-    nnz = 4 * intraBeamPixels.nval();
-    
+    intraBeamPixels = hpxSky.query_disc(equator, rho * 1.02);
+    nzpixels = intraBeamPixels.nval();
+    nnz = 4 * nzpixels;
+    std::cerr << "Maximum number of sky pixels within beam = " << nzpixels << std::endl;
+    std::cerr << "Maximum number of non-zero elements in matrix = " << 4 * nzpixels << std::endl; 
     // create cuSparse context
     CATCH_CUSPARSE( cusparseCreate(&cuspH) )
 
@@ -86,7 +113,6 @@ ConvolutionEngine::ConvolutionEngine(int _nsideSky, int _nsideBeam, int _nSample
     for(i = 0; i < N_PROC_STREAMS; i++)
     {
         CATCH_CUDA(cudaStreamCreate(&procStreams[i]))
-        std::cerr << "stream " << i << " created!" << std::endl;
     }
 }
 // dummy destructor
@@ -184,7 +210,7 @@ void ConvolutionEngine::allocate_device_buffers(void) {
     CATCH_CUDA(cudaMalloc((void**)&dev_csrValR, bytes))
     bytes = sizeof(int) * nnz;
     CATCH_CUDA(cudaMalloc((void**)&dev_csrColIndR, bytes))
-    bytes = sizeof(int) * (nspix + 1);
+    bytes = sizeof(int) * (nnz);
     CATCH_CUDA(cudaMalloc((void**)&dev_csrRowPtrR, bytes))
     // allocate buffers for calculation of D
     bytes = sizeof(float) * nspix;
@@ -223,10 +249,10 @@ void ConvolutionEngine::allocate_device_buffers(void) {
 void ConvolutionEngine::create_matrix(void) 
 {      
     CATCH_CUSPARSE(
-        cusparseCreateCsr(
-            &R, nspix, nbpix, nnz,
+        cusparseCreateCoo(&R, 
+            nspix, nbpix, nnz,
             dev_csrRowPtrR, dev_csrColIndR, dev_csrValR,
-            CUSPARSE_INDEX_32I, CUSPARSE_INDEX_32I,
+            CUSPARSE_INDEX_32I,
             CUSPARSE_INDEX_BASE_ZERO, CUDA_R_32F)
     )
 }
@@ -297,8 +323,6 @@ void ConvolutionEngine::sky_to_cuspvec(Sky* sky) {
     CATCH_CUSPARSE(cusparseCreateDnVec(&stokesV, nspix, dev_stokesV, CUDA_R_32F))
 }
 
-
-
 void ConvolutionEngine::iqu_to_tod(float *a, float *b)
 {
     int i;
@@ -311,12 +335,10 @@ void ConvolutionEngine::iqu_to_tod(float *a, float *b)
 
 void ConvolutionEngine::calculate_sky_pixel_coordinates(Sky* sky) {
 
-    int npixels;
     int skyPix;
     pointing sp;
     
-    npixels = 12 * nsideSky * nsideSky;
-    for(skyPix = 0; skyPix < npixels; skyPix++)
+    for(skyPix = 0; skyPix < nspix; skyPix++)
     {
         sp = sky->hpxBase.pix2ang(skyPix);
         
@@ -338,7 +360,7 @@ void ConvolutionEngine::update_matrix(int pix, float* weights, int* neigh) {
     csrColIndR[4 * pix + 2] = neigh[2];
     csrColIndR[4 * pix + 3] = neigh[3];
 
-    //csrRowPtrR[pix] = 4 * pix;
+    csrRowPtrR[pix] = 4 * pix;
 }
 
 void ConvolutionEngine::update_chi(int pix, float chi) {
@@ -349,64 +371,49 @@ void ConvolutionEngine::update_chi(int pix, float chi) {
 
 void ConvolutionEngine::fill_matrix(Sky* sky, PolBeam* beam, 
     float ra_bc, float dec_bc, float psi_bc) {
-    
+
     pointing bc;
     rangeset<int> intraBeamSkyPixels_rg;
     std::vector<int> intraBeamSkyPixels;
-
+    // build beam centern pointing
     bc.phi = double(ra_bc);
     bc.theta = M_PI_2 - double(dec_bc);
-
     intraBeamSkyPixels_rg = hpxSky.query_disc(bc, beam->get_rho_max());
     // sky pixels inside the beam are sorted in ascending order, nice!
     intraBeamSkyPixels = intraBeamSkyPixels_rg.toVector();
     
-    // set matrix descriptors to zero
-    for(int i=0; i < nnz; i++) csrValR[i] = 0.0;
-    for(int i=0; i < nnz; i++) csrColIndR[i] = 0;
-    for(int i=0; i < nspix + 1; i++) csrRowPtrR[i] = 0;
-
-    //#pragma omp parallel
-    //{
+    #pragma omp parallel shared(intraBeamSkyPixels)
+    {
     int i;
+    int m;
+    int loc;
     int idx;
-    int idx2;
-    int off;
     int skyPix;
     int chunksize;
     int reminder;
+
     double rho;
     double sigma;
     double chi;
     pointing bp;
     fix_arr<int, 4> neigh;
     fix_arr<double, 4> wgh;
-    float weights[4];
-    int neighbors[4];
-    
-    //idx = omp_get_thread_num();
-    //off = omp_get_num_threads();
-    //chunksize = intraBeamSkyPixels.size() / off;
-    // last thread gets more work
-    //reminder = 0;
-    //if(idx == omp_get_thread_num() - 1) {
-    //    reminder += (intraBeamSkyPixels.size() - chunksize * off);
-    //    reminder += (nnz / 4 - intraBeamSkyPixels.size()); 
-    //}
 
-    // Calculate equivalent beam coordinates for every sky pixel. 
-    i = 0; 
-    while(i < nnz / 4)
+
+    chunksize = intraBeamSkyPixels.size() / omp_get_num_threads();
+    reminder = 0;
+    if(omp_get_thread_num() == omp_get_num_threads() - 1)
+    {
+        reminder += (intraBeamSkyPixels.size() - chunksize * omp_get_num_threads());
+    } 
+
+    // Calculate equivalent beam coordinates for every sky pixel inside the beam.
+    i = 0;
+    idx = omp_get_thread_num();
+    while(i < chunksize + reminder)
     {   
-        idx2 = i;
-        if( i < intraBeamSkyPixels.size())
-        {
-            skyPix = intraBeamSkyPixels[i + idx * chunksize];        
-        }
-        else
-        {
-            skyPix = skyPix + 1;
-        }
+        loc = idx * chunksize + i;
+        skyPix = intraBeamSkyPixels[loc];
         // get equivalent beam coordinates and polarization angle. 
         SphericalTransformations::rho_sigma_chi_pix(
             &rho, &sigma, &chi,
@@ -420,55 +427,80 @@ void ConvolutionEngine::fill_matrix(Sky* sky, PolBeam* beam,
         // get interpolation information for beam at (rho, sigma). 
         beam->hpxBase.get_interpol(bp, neigh, wgh);
 
-        weights[0] = float(wgh[0]);    
-        weights[1] = float(wgh[1]);    
-        weights[2] = float(wgh[2]);    
-        weights[3] = float(wgh[3]);
-        neighbors[0] = neigh[0];    
-        neighbors[1] = neigh[1];    
-        neighbors[2] = neigh[2];    
-        neighbors[3] = neigh[3];
+        // as vector, for argsort
+        std::vector<int> neighv;
+        for(int j = 0; j < 4; j++)
+        {
+            neighv.push_back(neigh[j]);
+        }
+        // store sorted!!
+        auto ascidx = sort_indexes(neighv);
+        for(int k = 0; k < 4; k++) 
+        { 
+            csrValR[4 * loc + k] = float(wgh[ascidx[k]]);    
+            csrColIndR[4 * loc + k] = neigh[ascidx[k]];
+            csrRowPtrR[4 * loc + k] = skyPix;
+        }
+
+        // chi angles
+        s2chi[skyPix] = sinf(2.0f * float(chi));
+        c2chi[skyPix] = cosf(2.0f * float(chi));
         
-        csrValR[4 * idx2 + 0] = weights[0];    
-        csrValR[4 * idx2 + 1] = weights[1];    
-        csrValR[4 * idx2 + 2] = weights[2];    
-        csrValR[4 * idx2 + 3] = weights[3];    
-
-        csrColIndR[4 * idx2 + 0] = neigh[0];
-        csrColIndR[4 * idx2 + 1] = neigh[1];
-        csrColIndR[4 * idx2 + 2] = neigh[2];
-        csrColIndR[4 * idx2 + 3] = neigh[3];
-
-        s2chi[skyPix] = sinf(2.0f * chi);
-        c2chi[skyPix] = cosf(2.0f * chi);
-        
-        csrRowPtrR[skyPix] = 4 * skyPix;
-
-        //std::cout << idx2 << " " << nnz / 4 << std::endl;
-
         i++;
     }
-
-    // post-process csrRowPtr to comply with CSR
-    // fill zero-values rows properly
-    int fill_value = 0;
-    for(int i = 0; i < nspix; i++)
+    // handle pixels what would still fit into buffer but are outside the beam
+    // this usually doesn't for too much extra computation so it is handled
+    // by a single thread
+    m = 0;
+    if(omp_get_thread_num() == omp_get_num_threads() - 1)
     {
-        csrRowPtrR[i] = fill_value;
-        if(csrRowPtrR[i + 1] > csrRowPtrR[i])
+        while(m < nzpixels - intraBeamSkyPixels.size())
         {
-            fill_value = csrRowPtrR[i+1];
+            skyPix++;
+            loc++; 
+            // get equivalent beam coordinates and polarization angle. 
+            SphericalTransformations::rho_sigma_chi_pix(
+                &rho, &sigma, &chi,
+                double(ra_bc), double(dec_bc), double(psi_bc),
+                raPixSky[skyPix], decPixSky[skyPix]);
+
+            // assign to healpix pointig type
+            bp.theta = rho;
+            bp.phi = sigma;
+
+            // get interpolation information for beam at (rho, sigma). 
+            beam->hpxBase.get_interpol(bp, neigh, wgh);
+
+            // as vector, for argsort
+            std::vector<int> neighv;
+            for(int j = 0; j < 4; j++)
+            {
+                neighv.push_back(neigh[j]);
+            }
+            // store sorted!!
+            auto ascidx = sort_indexes(neighv);
+            for(int k = 0; k < 4; k++) 
+            { 
+                csrValR[4 * loc + k] = float(wgh[ascidx[k]]);    
+                csrColIndR[4 * loc + k] = neigh[ascidx[k]];
+                csrRowPtrR[4 * loc + k] = skyPix;
+            }
+
+            // chi angles
+            s2chi[skyPix] = sinf(2.0f * float(chi));
+            c2chi[skyPix] = cosf(2.0f * float(chi));
+            
+            m++;
         }
     }
-    // fill last value of csrRowPtrR
-    csrRowPtrR[nspix] = 4 * nspix;
+
+    } // end parallel region
 }
 
 /* copies sine and consine chi and matrix to device.*/
 void ConvolutionEngine::exec_transfer(void) {
 
     size_t bytes;
-
 
     // transfer cosine and sine of 2 chi
     bytes = sizeof(float) * nspix;
@@ -480,8 +512,10 @@ void ConvolutionEngine::exec_transfer(void) {
     CATCH_CUDA(cudaMemcpyAsync(dev_csrValR, csrValR, bytes, cudaMemcpyHostToDevice, transferStreams[0]))
     bytes = sizeof(int) * nnz;
     CATCH_CUDA(cudaMemcpyAsync(dev_csrColIndR, csrColIndR, bytes, cudaMemcpyHostToDevice, transferStreams[1]))
-    bytes = sizeof(int) * (nspix + 1);
-    CATCH_CUDA(cudaMemcpy(dev_csrRowPtrR, csrRowPtrR, bytes, cudaMemcpyHostToDevice))
+    bytes = sizeof(int) * (nnz);
+    CATCH_CUDA(cudaMemcpyAsync(dev_csrRowPtrR, csrRowPtrR, bytes, cudaMemcpyHostToDevice, transferStreams[0]))
+
+    CATCH_CUDA(cudaDeviceSynchronize())
 }
 
 void ConvolutionEngine::exec_single_convolution_step(int s) {
@@ -493,53 +527,56 @@ void ConvolutionEngine::exec_single_convolution_step(int s) {
     size_t bufferSize5;
     size_t bufferSize6;
 
-    // set cuSparse to run in device mode so all memory operations
-    // happen in the GPU (fully async)
-    CATCH_CUSPARSE(cusparseSetPointerMode(cuspH, CUSPARSE_POINTER_MODE_DEVICE))
-
-    // set CUBLAS to run in device mode, i.e., all memory operations happen 
-    // in the GPU
-    CATCH_CUBLAS( cublasSetPointerMode(cublasH, CUBLAS_POINTER_MODE_DEVICE) )
-
-    // calculate required extra space and allocate if needed
+    // calculate required extra space and allocate if needed when running the first time
     if(firstRun)
     {
-    CATCH_CUSPARSE(
-        cusparseSpMV_bufferSize(
-            cuspH, CUSPARSE_OPERATION_NON_TRANSPOSE,
-            &dev_alpha, R, beamIa, dev_beta, AbeamIa, CUDA_R_32F,
-            CUSPARSE_SPMV_CSR_ALG2, &bufferSize1)
-    )
-    CATCH_CUSPARSE(
-        cusparseSpMV_bufferSize(
-            cuspH, CUSPARSE_OPERATION_NON_TRANSPOSE,
-            dev_alpha, R, beamQa, dev_beta, AbeamQa, CUDA_R_32F,
-            CUSPARSE_SPMV_CSR_ALG2, &bufferSize2)
-    )
-    CATCH_CUSPARSE(
-        cusparseSpMV_bufferSize(
-            cuspH, CUSPARSE_OPERATION_NON_TRANSPOSE,
-            dev_alpha, R, beamUa, dev_beta, AbeamUa, CUDA_R_32F,
-            CUSPARSE_SPMV_CSR_ALG2, &bufferSize3)
-    )
-    CATCH_CUSPARSE(
-        cusparseSpMV_bufferSize(
-            cuspH, CUSPARSE_OPERATION_NON_TRANSPOSE,
-            dev_alpha, R, beamIb, dev_beta, AbeamIb, CUDA_R_32F,
-            CUSPARSE_SPMV_CSR_ALG2, &bufferSize4)
-    )
-    CATCH_CUSPARSE(
-        cusparseSpMV_bufferSize(
-            cuspH, CUSPARSE_OPERATION_NON_TRANSPOSE,
-            dev_alpha, R, beamQa, dev_beta, AbeamUb, CUDA_R_32F,
-            CUSPARSE_SPMV_CSR_ALG2, &bufferSize5)
-    )
-    CATCH_CUSPARSE(
-        cusparseSpMV_bufferSize(
-            cuspH, CUSPARSE_OPERATION_NON_TRANSPOSE,
-            dev_alpha, R, beamQa, dev_beta, AbeamUb, CUDA_R_32F,
-            CUSPARSE_SPMV_CSR_ALG2, &bufferSize6)
-    )
+        // set cuSparse to run in device mode so all memory operations
+        // happen in the GPU (fully async)
+        CATCH_CUSPARSE(cusparseSetPointerMode(cuspH, CUSPARSE_POINTER_MODE_DEVICE))
+
+        // set CUBLAS to run in device mode, i.e., all memory operations happen 
+        // in the GPU
+        CATCH_CUBLAS( cublasSetPointerMode(cublasH, CUBLAS_POINTER_MODE_DEVICE) )
+        // set cuSparse to use the same stream as cuBlas
+        CATCH_CUSPARSE( cusparseSetStream(cuspH, procStreams[0]) )
+        // set cuBLAS to use the stream as cuSparse
+        CATCH_CUBLAS( cublasSetStream(cublasH, procStreams[0]) )
+        CATCH_CUSPARSE(
+            cusparseSpMV_bufferSize(
+                cuspH, CUSPARSE_OPERATION_NON_TRANSPOSE,
+                &dev_alpha, R, beamIa, dev_beta, AbeamIa, CUDA_R_32F,
+                CUSPARSE_SPMV_ALG_DEFAULT, &bufferSize1)
+        )
+        CATCH_CUSPARSE(
+            cusparseSpMV_bufferSize(
+                cuspH, CUSPARSE_OPERATION_NON_TRANSPOSE,
+                dev_alpha, R, beamQa, dev_beta, AbeamQa, CUDA_R_32F,
+                CUSPARSE_SPMV_ALG_DEFAULT, &bufferSize2)
+        )
+        CATCH_CUSPARSE(
+            cusparseSpMV_bufferSize(
+                cuspH, CUSPARSE_OPERATION_NON_TRANSPOSE,
+                dev_alpha, R, beamUa, dev_beta, AbeamUa, CUDA_R_32F,
+                CUSPARSE_SPMV_ALG_DEFAULT, &bufferSize3)
+        )
+        CATCH_CUSPARSE(
+            cusparseSpMV_bufferSize(
+                cuspH, CUSPARSE_OPERATION_NON_TRANSPOSE,
+                dev_alpha, R, beamIb, dev_beta, AbeamIb, CUDA_R_32F,
+                CUSPARSE_SPMV_ALG_DEFAULT, &bufferSize4)
+        )
+        CATCH_CUSPARSE(
+            cusparseSpMV_bufferSize(
+                cuspH, CUSPARSE_OPERATION_NON_TRANSPOSE,
+                dev_alpha, R, beamQa, dev_beta, AbeamUb, CUDA_R_32F,
+                CUSPARSE_SPMV_ALG_DEFAULT, &bufferSize5)
+        )
+        CATCH_CUSPARSE(
+            cusparseSpMV_bufferSize(
+                cuspH, CUSPARSE_OPERATION_NON_TRANSPOSE,
+                dev_alpha, R, beamQa, dev_beta, AbeamUb, CUDA_R_32F,
+                CUSPARSE_SPMV_ALG_DEFAULT, &bufferSize6)
+        )
 
         CATCH_CUDA( cudaMalloc(&dev_tempBuffer1, bufferSize1) )
         CATCH_CUDA( cudaMalloc(&dev_tempBuffer2, bufferSize2) )
@@ -547,115 +584,94 @@ void ConvolutionEngine::exec_single_convolution_step(int s) {
         CATCH_CUDA( cudaMalloc(&dev_tempBuffer4, bufferSize4) )
         CATCH_CUDA( cudaMalloc(&dev_tempBuffer5, bufferSize5) )
         CATCH_CUDA( cudaMalloc(&dev_tempBuffer6, bufferSize6) )
-    }
-    
-    CATCH_CUDA(cudaDeviceSynchronize())
-    CATCH_CUDA(cudaGetLastError())
-    
-    if(firstRun)
-    {
-        // set cublas and cusparse to use the same stream
-        CATCH_CUSPARSE( cusparseSetStream(cuspH, procStreams[0]) )
-        CATCH_CUDA( cudaStreamBeginCapture(procStreams[0], cudaStreamCaptureModeGlobal) )
-
-        // Detector a
-        // calculate R x beam for Stokes I beam of detector a
-        CATCH_CUSPARSE(
-            cusparseSpMV(cuspH,
-                CUSPARSE_OPERATION_NON_TRANSPOSE, 
-                dev_alpha, R, beamIa, dev_beta, AbeamIa,
-                CUDA_R_32F,
-                CUSPARSE_SPMV_CSR_ALG2, 
-                dev_tempBuffer1)
-        )
-        // Stokes Q beam of detector a ...
-        CATCH_CUSPARSE(
-            cusparseSpMV(cuspH,
-                CUSPARSE_OPERATION_NON_TRANSPOSE,
-                dev_alpha, R, beamQa, dev_beta, AbeamQa,
-                CUDA_R_32F,
-                CUSPARSE_SPMV_CSR_ALG2, 
-                dev_tempBuffer2)
-        )
-        // Stokes U beam of detector a
-        CATCH_CUSPARSE(
-            cusparseSpMV(cuspH,
-                CUSPARSE_OPERATION_NON_TRANSPOSE, 
-                dev_alpha, R, beamUa, dev_beta, AbeamUa,
-                CUDA_R_32F,
-                CUSPARSE_SPMV_CSR_ALG2, 
-                dev_tempBuffer3)
-        )
         
-        // Repeat for detector b 
-        // calculate R x beam for:
-        // - Stokes I beam of detector b
-        CATCH_CUSPARSE(
-            cusparseSpMV(cuspH,
-                CUSPARSE_OPERATION_NON_TRANSPOSE, 
-                dev_alpha, R, beamIb, dev_beta, AbeamIb,
-                CUDA_R_32F,
-                CUSPARSE_SPMV_CSR_ALG2, 
-                dev_tempBuffer4)
-        )
-        // - Stokes Q beam of detector b ...
-        CATCH_CUSPARSE(
-            cusparseSpMV(cuspH,
-                CUSPARSE_OPERATION_NON_TRANSPOSE, 
-                dev_alpha, R, beamQb, dev_beta, AbeamQb,
-                CUDA_R_32F,
-                CUSPARSE_SPMV_CSR_ALG2, 
-                dev_tempBuffer5)
-        )
-        // - Stokes U beam of detector b
-        CATCH_CUSPARSE(
-            cusparseSpMV(cuspH,
-                CUSPARSE_OPERATION_NON_TRANSPOSE, 
-                dev_alpha, R, beamUb, dev_beta, AbeamUb,
-                CUDA_R_32F,
-                CUSPARSE_SPMV_CSR_ALG2, 
-                dev_tempBuffer6)
-        )
-        CATCH_CUDA(cudaStreamEndCapture(procStreams[0], &graph))
         CATCH_CUDA(cudaDeviceSynchronize())
         CATCH_CUDA(cudaGetLastError())
-        CATCH_CUDA(cudaGraphInstantiateWithFlags(&graph_exec, graph, 0))
-        firstRun = false;
-        useGraph = true;
-    }
-    // capture graph execution
-    else
-    {
-        CATCH_CUDA( cudaGraphLaunch(graph_exec, procStreams[0]) )
-    }
 
-    CATCH_CUDA(cudaStreamSynchronize(procStreams[0]))
+        firstRun = false;
+    }
+    
+
+    // Detector a
+    // calculate R x beam for Stokes I beam of detector a
+    CATCH_CUSPARSE(
+        cusparseSpMV(cuspH,
+            CUSPARSE_OPERATION_NON_TRANSPOSE, 
+            dev_alpha, R, beamIa, dev_beta, AbeamIa,
+            CUDA_R_32F,
+            CUSPARSE_SPMV_ALG_DEFAULT, 
+            dev_tempBuffer1)
+    )
+
+    // Stokes Q beam of detector a ...
+    CATCH_CUSPARSE(
+        cusparseSpMV(cuspH,
+            CUSPARSE_OPERATION_NON_TRANSPOSE,
+            dev_alpha, R, beamQa, dev_beta, AbeamQa,
+            CUDA_R_32F,
+            CUSPARSE_SPMV_ALG_DEFAULT, 
+            dev_tempBuffer2)
+    )
+    // Stokes U beam of detector a
+    CATCH_CUSPARSE(
+        cusparseSpMV(cuspH,
+            CUSPARSE_OPERATION_NON_TRANSPOSE, 
+            dev_alpha, R, beamUa, dev_beta, AbeamUa,
+            CUDA_R_32F,
+            CUSPARSE_SPMV_ALG_DEFAULT, 
+            dev_tempBuffer3)
+    )
+    
+    // Repeat for detector b 
+    // calculate R x beam for:
+    // - Stokes I beam of detector b
+    CATCH_CUSPARSE(
+        cusparseSpMV(cuspH,
+            CUSPARSE_OPERATION_NON_TRANSPOSE, 
+            dev_alpha, R, beamIb, dev_beta, AbeamIb,
+            CUDA_R_32F,
+            CUSPARSE_SPMV_ALG_DEFAULT, 
+            dev_tempBuffer4)
+    )
+    // - Stokes Q beam of detector b ...
+    CATCH_CUSPARSE(
+        cusparseSpMV(cuspH,
+            CUSPARSE_OPERATION_NON_TRANSPOSE, 
+            dev_alpha, R, beamQb, dev_beta, AbeamQb,
+            CUDA_R_32F,
+            CUSPARSE_SPMV_ALG_DEFAULT, 
+            dev_tempBuffer5)
+    )
+    // - Stokes U beam of detector b
+    CATCH_CUSPARSE(
+        cusparseSpMV(cuspH,
+            CUSPARSE_OPERATION_NON_TRANSPOSE, 
+            dev_alpha, R, beamUb, dev_beta, AbeamUb,
+            CUDA_R_32F,
+            CUSPARSE_SPMV_ALG_DEFAULT, 
+            dev_tempBuffer6)
+    )
 
     // calculate D_Q for detector a
     // note: the order in which operations below are executed should not be changed
     //       as it was designed to maximize concurrency with cuSparse
     // - multiply cos(2chi) by Q beam
-    cudaUtilities::ewxty(nspix, dev_AbeamQa, dev_c2chi, procStreams[1], dev_DQ1a); 
+    cudaUtilities::ewxty(nspix, dev_AbeamQa, dev_c2chi, procStreams[0], dev_DQ1a); 
     // - multiply sin(2chi) by Q beam
-    cudaUtilities::ewxty(nspix, dev_AbeamQa, dev_s2chi, procStreams[1], dev_DU2a);
+    cudaUtilities::ewxty(nspix, dev_AbeamQa, dev_s2chi, procStreams[0], dev_DU2a);
     // - multiply sin(2chi) by U beam
-    cudaUtilities::ewxty(nspix, dev_AbeamUa, dev_s2chi, procStreams[2], dev_DQ2a);
+    cudaUtilities::ewxty(nspix, dev_AbeamUa, dev_s2chi, procStreams[0], dev_DQ2a);
     // - multiply cos(2chi) by U beam
-    cudaUtilities::ewxty(nspix, dev_AbeamUa, dev_c2chi, procStreams[2], dev_DU1a);
+    cudaUtilities::ewxty(nspix, dev_AbeamUa, dev_c2chi, procStreams[0], dev_DU1a);
     // - multiply cos(2chi) by Q beam
-    cudaUtilities::ewxty(nspix, dev_AbeamQb, dev_c2chi, procStreams[3], dev_DQ1b);
+    cudaUtilities::ewxty(nspix, dev_AbeamQb, dev_c2chi, procStreams[0], dev_DQ1b);
     // - multiply sin(2chi) by Q beam
-    cudaUtilities::ewxty(nspix, dev_AbeamQb, dev_s2chi, procStreams[3], dev_DU2b);
+    cudaUtilities::ewxty(nspix, dev_AbeamQb, dev_s2chi, procStreams[0], dev_DU2b);
     // - multiply sin(2chi) by U beam
-    cudaUtilities::ewxty(nspix, dev_AbeamUb, dev_s2chi, procStreams[4], dev_DQ2b);
+    cudaUtilities::ewxty(nspix, dev_AbeamUb, dev_s2chi, procStreams[0], dev_DQ2b);
     // - multiply cos(2chi) by U beam
-    cudaUtilities::ewxty(nspix, dev_AbeamUb, dev_c2chi, procStreams[4], dev_DU1b);
+    cudaUtilities::ewxty(nspix, dev_AbeamUb, dev_c2chi, procStreams[0], dev_DU1b);
 
-    for(int i = 1; i < N_PROC_STREAMS; i++) {
-        CATCH_CUDA(cudaStreamSynchronize(procStreams[i]))
-    }
-
-    CATCH_CUBLAS( cublasSetStream(cublasH, procStreams[0]) )
     // calculate D for detector a 
     // - add and overwrite DQ1
     CATCH_CUBLAS(cublasSaxpy(cublasH, nspix, dev_subme, dev_DQ2a, 1, dev_DQ1a, 1))
@@ -689,4 +705,5 @@ void ConvolutionEngine::exec_single_convolution_step(int s) {
     CATCH_CUBLAS(cublasSdot(cublasH, nspix, dev_stokesQ, 1, dev_DQ1b, 1, dev_qb + s))
     // - Stokes U part for detector a
     CATCH_CUBLAS(cublasSdot(cublasH, nspix, dev_stokesU, 1, dev_DU1b, 1, dev_ub + s))
+    
 } 

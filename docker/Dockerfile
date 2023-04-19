@@ -62,4 +62,5 @@ RUN useradd -ms /bin/bash pisco4cmb
 # change ownership of workind directory
 RUN chown pisco4cmb.pisco4cmb /pisco4cmb/workdir
 USER pisco4cmb
+RUN echo "source /opt/intel/oneapi/setvars.sh" > /home/pisco4cmb/.bashrc
 WORKDIR /pisco4cmb/workdir

@@ -12,23 +12,23 @@
 #define DEG2RAD (M_PI / 180.0)
 #define RAD2DEG (1.0 / DEG2RAD)
 // sky, beam and map resolution parameters
-#define NSIDE_SKY (128)
-#define NSIDE_BEAM (512)
-#define NSIDE_MAP (128)
+#define NSIDE_SKY (256)
+#define NSIDE_BEAM (1024)
+#define NSIDE_MAP (256)
 // beam parameters
 #define FWHMX_DEG (3.0)
 #define FWHMY_DEG (3.0)
 #define PHI0_DEG (0.0)
 // scanning parameters
-#define NRA (48)
-#define NDEC (48)
+#define NRA (128)
+#define NDEC (128)
 #define NPA (3)
 #define NSAMP (NRA * NDEC * NPA)
 #define RA0_DEG (45.0)
-#define DEC0_DEG (0.0)
+#define DEC0_DEG (0)
 #define PA0_DEG (0.0)
-#define DRA_DEG (6.0)
-#define DDEC_DEG (6.0)
+#define DRA_DEG (15)
+#define DDEC_DEG (15)
 #define DPA_DEG (45.0)
 // in radians, please
 #define RA0 (RA0_DEG * DEG2RAD)
@@ -46,9 +46,9 @@ int main(void)
 
     Scanning scan;
     Sky sky(NSIDE_SKY);
-    PolBeam beam(NSIDE_BEAM, 0.1);
+    PolBeam beam(NSIDE_BEAM, 0.2);
     Mapper mapper(NSIDE_MAP);
-    ConvolutionEngine conv(NSIDE_SKY, NSIDE_BEAM, NSAMP, 0.1);
+    ConvolutionEngine conv(NSIDE_SKY, NSIDE_BEAM, NSAMP, 0.2);
 
     // make beams of detector a and b to be gaussian, no cross-pol
     beam.allocate_buffers();
@@ -83,48 +83,39 @@ int main(void)
     // execute convolution
     // first step is outside the loop to allow better concurrency
     s = 0;
-    t1s = std::chrono::steady_clock::now();
-    conv.fill_matrix(&sky, &beam, 
-        scan.get_ra_ptr()[s], scan.get_dec_ptr()[s], scan.get_pa_ptr()[s]);
-    t1e = std::chrono::steady_clock::now();
-    time_fill += std::chrono::duration_cast<std::chrono::milliseconds>(t1e - t1s).count();
     while(s < scan.size())
     {
-        t1s = std::chrono::steady_clock::now();
-        conv.exec_transfer();
-        t1e = std::chrono::steady_clock::now();
-        time_transfer += std::chrono::duration_cast<std::chrono::milliseconds>(t1e - t1s).count();
-
-        t1s = std::chrono::steady_clock::now();
-        conv.exec_single_convolution_step(s);
-        t1e = std::chrono::steady_clock::now();
-        time_conv += std::chrono::duration_cast<std::chrono::milliseconds>(t1e - t1s).count();
-
-        s = s + 1;
-        if(s == scan.size())
-        {
-            break;
-        }
-
         t1s = std::chrono::steady_clock::now();
         conv.fill_matrix(&sky, &beam, 
             scan.get_ra_ptr()[s], scan.get_dec_ptr()[s], scan.get_pa_ptr()[s]);
         t1e = std::chrono::steady_clock::now();
-        time_fill += std::chrono::duration_cast<std::chrono::milliseconds>(t1e - t1s).count();
+        time_fill += std::chrono::duration_cast<std::chrono::microseconds>(t1e - t1s).count();
+        
+        t1s = std::chrono::steady_clock::now();
+        conv.exec_transfer();
+        t1e = std::chrono::steady_clock::now();
+        time_transfer += std::chrono::duration_cast<std::chrono::microseconds>(t1e - t1s).count();
+
+        t1s = std::chrono::steady_clock::now();
+        conv.exec_single_convolution_step(s);
+        t1e = std::chrono::steady_clock::now();
+        time_conv += std::chrono::duration_cast<std::chrono::microseconds>(t1e - t1s).count();
+
+        s = s + 1;
     }
     conv.sync();
     // transfer data back to host, as TOD (i + q + u)
     conv.iqu_to_tod(data_a, data_b);
     auto end = std::chrono::steady_clock::now();
-    time_wall = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+    time_wall = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
     // report
 
-    std::cerr << "Time filling matrix: " << time_fill << " ms" << std::endl;
-    std::cerr << "Time transfering matrix: " << time_transfer << " ms" << std::endl;
-    std::cerr << "Time using matrix: " << time_conv << " ms" << std::endl;
-    std::cerr << "Time not accounted for: " << time_fill + time_transfer + time_conv - time_wall << " ms" << std::endl;
-    std::cerr << "[INFO] Computed " << NRA * NDEC * NPA << " samples in " << time_wall << " ms ";
-    std::cerr << "(" << (NRA * NDEC * NPA) / (time_wall / 1000.0) << " samples/sec)" << std::endl;
+    std::cerr << "Time filling matrix: " << time_fill / 1000.0 << " ms" << std::endl;
+    std::cerr << "Time transfering matrix: " << time_transfer / 1000.0 << " ms" << std::endl;
+    std::cerr << "Time using matrix: " << time_conv / 1000.0 << " ms" << std::endl;
+    std::cerr << "Time not accounted for: " << (time_fill + time_transfer + time_conv - time_wall) / 1000.0 << " ms" << std::endl;
+    std::cerr << "[INFO] Computed " << NRA * NDEC * NPA << " samples in " << time_wall / 1000.0 << " ms ";
+    std::cerr << "(" << (NRA * NDEC * NPA) / (time_wall / 1E6) << " samples/sec)" << std::endl;
 
     // transform results to a map
     mapper.accumulate_data(scan.size(), 
