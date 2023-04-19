@@ -1,0 +1,16 @@
+{
+    "nside_sky" : 128,
+    "input_sky_path" : "workdir/full_sky/128/cmb.txt",
+    "nside_beam" : 512,
+    "fwhm_x_a" : 2.0,
+    "fwhm_y_a" : 2.0,
+    "phi_0_a" : 0.0,
+    "fwhm_x_b" : 2.0,
+    "fwhm_y_b" : 2.0,
+    "phi_0_b" : 0.0,
+    "nside_output_map" : 128,
+    "output_map_path" : "workdir/full_sky/128/output_map.txt",
+    "pa0" : 0.0,
+    "dpa" : 45.0,
+    "npoints_pa" : 3
+}
