@@ -78,7 +78,7 @@ int main(int argc, char* argv[])
 
     Scanning scan;
     Sky sky(nside_sky);
-    PolBeam beam(nside_beam);
+    PolBeam beam(nside_beam, 0.2);
     Mapper mapper(nside_output_map);
     std::ofstream outputmap_file(output_map_path);
 
@@ -86,7 +86,7 @@ int main(int argc, char* argv[])
     scan.make_simple_full_sky_scan(nside_sky, npa, pa0 * DEG2RAD, dpa * DEG2RAD);
     nsamples = scan.size();
 
-    ConvolutionEngine conv(nside_sky, nside_beam, nsamples);
+    ConvolutionEngine conv(nside_sky, nside_beam, nsamples, 0.2);
     // buffers for detector data
     data_a = (float *)malloc(sizeof(float) * nsamples);
     data_b = (float *)malloc(sizeof(float) * nsamples);
